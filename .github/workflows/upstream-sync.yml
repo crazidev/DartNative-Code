@@ -1,0 +1,116 @@
+name: Upstream Sync Compatibility Check
+
+on:
+  schedule:
+    # Runs every Monday at 06:00 UTC to catch weekly upstream changes.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: "Upstream branch to test against (default: master)"
+        required: false
+        default: "master"
+  pull_request:
+    branches:
+      - "feature/modularize-dartnative-patches"
+      - "dartnative-main"
+
+jobs:
+  upstream-sync-check:
+    name: Test upstream Dart-Code compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout DartNative branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/Dart-Code/Dart-Code.git || true
+          git remote -v
+
+      - name: Fetch upstream
+        run: |
+          BRANCH="${{ github.event.inputs.upstream_branch || 'master' }}"
+          git fetch upstream "$BRANCH"
+          echo "UPSTREAM_BRANCH=$BRANCH" >> "$GITHUB_ENV"
+
+      - name: Check for merge conflicts
+        id: merge_check
+        run: |
+          git config user.email "ci@dartnative.dev"
+          git config user.name "DartNative CI"
+          if ! git merge --no-commit --no-ff "upstream/$UPSTREAM_BRANCH" 2>&1; then
+            echo "CONFLICTS=true" >> "$GITHUB_OUTPUT"
+            git merge --abort
+          else
+            echo "CONFLICTS=false" >> "$GITHUB_OUTPUT"
+            git merge --abort
+          fi
+
+      - name: Report conflicts
+        if: steps.merge_check.outputs.CONFLICTS == 'true'
+        run: |
+          echo "::error ::Merge conflicts detected with upstream/$UPSTREAM_BRANCH."
+          echo "Run scripts/ci/test-upstream-sync.sh locally to review conflicts."
+          exit 1
+
+      - name: Apply DartNative patches
+        run: ./scripts/patch-all.sh
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Summary
+        run: |
+          echo "### ✅ Upstream Sync Check Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "DartNative patches apply cleanly on top of \`upstream/$UPSTREAM_BRANCH\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Build and lint both passed." >> "$GITHUB_STEP_SUMMARY"
+
+  dartnative-build:
+    name: Build & Lint DartNative extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply DartNative patches
+        run: ./scripts/patch-all.sh
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Verify unpatch restores pristine baseline
+        run: |
+          ./scripts/unpatch-all.sh
+          git diff --exit-code || (echo "::error ::unpatch-all did not cleanly restore upstream baseline" && exit 1)

@@ -1,0 +1,137 @@
+{
+	"_comment": "DartNative manifest overlay — applied by scripts/patch-manifest.ts at build time.",
+	"displayName": "DartX",
+	"name": "dartx",
+	"description": "Dart & DartNative language support and debugger for Visual Studio Code.",
+	"commandCategoryRenames": {
+		"Flutter": "DartNative"
+	},
+	"commandCategoryOverrides": {
+		"flutter.attach": "DartNative",
+		"flutter.attachProcess": "DartNative",
+		"flutter.runProfileMode": "DartNative",
+		"flutter.runReleaseMode": "DartNative"
+	},
+	"commandTitleRenames": {
+		"flutter.createProject": "Create New Project",
+		"flutter.createProject.sidebar": "Create New DartNative Project",
+		"flutter.doctor": "Run Doctor",
+		"flutter.doctor.sidebar": "Run Doctor",
+		"flutter.clean": "Clean Project",
+		"flutter.clean.all": "Clean All Projects",
+		"flutter.upgrade": "Run Upgrade",
+		"flutter.packages.get": "Get Packages",
+		"flutter.packages.get.all": "Get Packages for All Projects",
+		"flutter.packages.upgrade": "Upgrade Packages",
+		"flutter.packages.upgrade.majorVersions": "Upgrade Packages (--major-versions)",
+		"flutter.packages.outdated": "List Outdated Packages",
+		"flutter.addSdkToPath": "Add SDK to PATH",
+		"flutter.hotReload": "Hot Reload",
+		"flutter.hotRestart": "Hot Restart",
+		"flutter.screenshot": "Save Screenshot",
+		"flutter.selectDevice": "Select Device",
+		"flutter.launchEmulator": "Launch Emulator",
+		"flutter.attach": "Attach to DartNative on Device",
+		"flutter.attachProcess": "Attach to DartNative Process",
+		"flutter.runProfileMode": "Run DartNative in Profile Mode",
+		"flutter.runReleaseMode": "Run DartNative in Release Mode",
+		"flutter.openDevTools": "Open DevTools",
+		"dart.changeFlutterSdk": "Change SDK",
+		"dart.openObservatory": "Open Observatory (Deprecated)"
+	},
+	"removeViewContainers": [
+		"flutterPropertyEditorContainer",
+		"sidebarDevToolsInspectorContainer",
+		"sidebarDevToolsDeepLinksContainer",
+		"sidebarWidgetPreviewContainer"
+	],
+	"renameViewContainers": {
+		"flutter": {
+			"title": "Dart Native"
+		},
+		"sidebarDevToolsContainer": {
+			"title": "Dart Native DevTools"
+		}
+	},
+	"removeViews": [
+		"flutterPropertyEditor",
+		"sidebarDevToolsCpuProfiler",
+		"sidebarDevToolsPerformance",
+		"sidebarDevToolsInspector",
+		"sidebarDevToolsDeepLinks",
+		"sidebarWidgetPreview"
+	],
+	"renameViews": {
+		"dartFlutterSidebar": {
+			"name": "Dart Native Sidebar"
+		},
+		"sidebarDevToolsMemory": {
+			"contextualTitle": "Dart Native DevTools: Memory"
+		},
+		"sidebarDevToolsNetwork": {
+			"contextualTitle": "Dart Native DevTools: Network"
+		},
+		"sidebarDevToolsLogging": {
+			"contextualTitle": "Dart Native DevTools: Logging"
+		}
+	},
+	"disabledCommands": [
+		"flutter.upgrade",
+		"flutter.task.genl10n",
+		"flutter.showWidgetPreview",
+		"flutter.toggleDebugPainting",
+		"flutter.togglePerformanceOverlay",
+		"flutter.toggleRepaintRainbow",
+		"flutter.togglePaintBaselines",
+		"flutter.toggleSlowAnimations",
+		"flutter.toggleDebugModeBanner",
+		"flutter.inspectWidget",
+		"flutter.inspectWidget.autoCancel",
+		"flutter.cancelInspectWidget",
+		"flutter.overridePlatform",
+		"flutter.toggleBrightness",
+		"flutter.openInAndroidStudio",
+		"flutter.openInXcode",
+		"dart.openDevToolsInspector",
+		"dart.openDevToolsDeepLinks",
+		"dart.openDevToolsCpuProfiler",
+		"dart.openDevToolsPerformance",
+		"dart.openObservatory"
+	],
+	"configurationProperties": {
+		"dart.formatAfterRefactoring": {
+			"type": "boolean",
+			"default": true,
+			"markdownDescription": "Whether to automatically format the document after applying refactorings (such as Extract Widget, Wrap with Widget, and state conversions).",
+			"scope": "resource"
+		},
+		"dart.formatAfterSnippet": {
+			"type": "boolean",
+			"default": true,
+			"markdownDescription": "Whether to automatically format the document after inserting widget snippets (such as `stless` and `stful`).",
+			"scope": "resource"
+		},
+		"dart.enableWidgetRefactors": {
+			"type": "boolean",
+			"default": true,
+			"markdownDescription": "Whether to enable built-in DartX widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin.",
+			"scope": "resource"
+		},
+		"dart.moveNonFinalFieldsToState": {
+			"type": "boolean",
+			"default": true,
+			"markdownDescription": "When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers.",
+			"scope": "resource"
+		}
+	},
+	"snippets": [
+		{
+			"language": "dart",
+			"path": "./snippets/dart.json"
+		},
+		{
+			"language": "dart",
+			"path": "./snippets/flutter.json"
+		}
+	]
+}
