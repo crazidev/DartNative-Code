@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { Uri } from "vscode";
 import { executableNames } from "../../shared/constants";
 import { Logger } from "../../shared/interfaces";
 import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
@@ -24,28 +25,30 @@ export function findDartNativeSdk(
 	containsFile: (folder: string, filePath: string) => boolean,
 ): SdkSearchResult {
 	const candidatePaths: string[] = [];
-	for (const searchPath of searchPaths) {
-		if (!searchPath) continue;
-		candidatePaths.push(searchPath);
 
-		const hasDnBinary =
-			containsFile(searchPath, "bin/" + executableNames.dn) ||
-			containsFile(searchPath, executableNames.dn);
-
-		if (!hasDnBinary) continue;
-
-		const hasAnchor =
-			containsFile(searchPath, "analysis_options.yaml") ||
-			containsFile(searchPath, "bin/dn") ||
-			containsFile(searchPath, "bin/dn.bat") ||
-			containsFile(searchPath, "bin/flutter");
-
-		if (hasAnchor) {
-			logger.info(`Found DartNative SDK at: ${searchPath}`);
-			return { sdkPath: searchPath, candidatePaths };
+	for (const folder of searchPaths) {
+		if (!folder) continue;
+		candidatePaths.push(folder);
+		// Does this folder look like a DartNative SDK?
+		if (isDartNativeSdk(folder, containsFile)) {
+			logger.info(`Found DartNative SDK at ${folder}`);
+			return { candidatePaths, sdkPath: folder };
 		}
 	}
-	return { sdkPath: undefined, candidatePaths };
+
+	return { candidatePaths, sdkPath: undefined };
+}
+
+/**
+ * Returns true if the folder contains a DartNative SDK.
+ */
+export function isDartNativeSdk(
+	folder: string,
+	containsFile: (folder: string, filePath: string) => boolean,
+): boolean {
+	const hasDnBinary = containsFile(folder, `bin/${executableNames.dn}`);
+	const hasFlutterBinary = containsFile(folder, `bin/${executableNames.flutter}`);
+	return hasDnBinary && (hasFlutterBinary || containsFile(folder, "bin/dn") || containsFile(folder, "analysis_options.yaml"));
 }
 
 /**
@@ -60,11 +63,28 @@ export function resolveDnExecutable(sdkFlutterPath: string, flutterExecutable: s
 }
 
 /**
- * Returns true if the workspace folder, cwd, or program is inside a DartNative project,
+ * Returns true if a path is inside a DartNative project folder.
+ */
+export function isPathInsideDartNativeProject(targetPath: string): boolean {
+	let current = path.resolve(targetPath);
+	while (true) {
+		if (isDartNativeProjectFolder(current))
+			return true;
+		const parent = path.dirname(current);
+		if (parent === current)
+			break;
+		current = parent;
+	}
+	return false;
+}
+
+/**
+ * Returns true if the debug session should be treated as a DartNative session,
+ * based on workspace folder, program path, cwd, session name,
  * or if the SDK contains a `dn` binary.
  */
 export function isDartNativeDebugSession(opts: {
-	workspaceFolderUri?: { fsPath: string } | undefined;
+	workspaceFolderUri?: Uri | string | undefined;
 	cwd?: string | undefined;
 	program?: string | undefined;
 	sessionName?: string | undefined;
@@ -72,8 +92,11 @@ export function isDartNativeDebugSession(opts: {
 }): boolean {
 	const { workspaceFolderUri, cwd, program, sessionName, sdkFlutterPath } = opts;
 
-	if (workspaceFolderUri && isDartNativeProjectFolder(fsPath(workspaceFolderUri as any)))
-		return true;
+	if (workspaceFolderUri) {
+		const folderPath = typeof workspaceFolderUri === "string" ? workspaceFolderUri : fsPath(workspaceFolderUri);
+		if (isDartNativeProjectFolder(folderPath))
+			return true;
+	}
 	if (cwd && isDartNativeProjectFolder(cwd))
 		return true;
 	if (program && isPathInsideDartNativeProject(program))
@@ -83,21 +106,5 @@ export function isDartNativeDebugSession(opts: {
 	if (sdkFlutterPath && fs.existsSync(path.join(sdkFlutterPath, "bin", executableNames.dn)))
 		return true;
 
-	return false;
-}
-
-/**
- * Returns true if any ancestor folder of the given file path is a DartNative project folder.
- */
-export function isPathInsideDartNativeProject(filePath: string): boolean {
-	let dir = path.dirname(filePath);
-	// Walk up at most 10 levels to find a pubspec that references dartnative.
-	for (let i = 0; i < 10; i++) {
-		if (isDartNativeProjectFolder(dir))
-			return true;
-		const parent = path.dirname(dir);
-		if (parent === dir) break;
-		dir = parent;
-	}
 	return false;
 }

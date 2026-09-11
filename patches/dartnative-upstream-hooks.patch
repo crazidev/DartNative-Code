@@ -7,6 +7,18 @@ index 666a2f43..48fbcef2 100644
  out/
  pubspec.lock
 +package.json.upstream
+diff --git a/eslint.config.js b/eslint.config.js
+index 1454e5b5..d82c5643 100644
+--- a/eslint.config.js
++++ b/eslint.config.js
+@@ -16,6 +16,7 @@ export default defineConfig([
+ 			"node_modules/**",
+ 			"src/debug/**", // This is legacy code going away soon.
+ 			"out/**",
++			"scripts/**",
+ 			"webpack.config.js",
+ 		],
+ 	},
 diff --git a/snippets/dart.json b/snippets/dart.json
 index dc3273e4..9ae80dcf 100644
 --- a/snippets/dart.json
