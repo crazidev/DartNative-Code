@@ -40,20 +40,20 @@
 		"dart.openObservatory": "Open Observatory (Deprecated)"
 	},
 	"removeViewContainers": [
+		"flutter",
 		"flutterPropertyEditorContainer",
 		"sidebarDevToolsInspectorContainer",
 		"sidebarDevToolsDeepLinksContainer",
 		"sidebarWidgetPreviewContainer"
 	],
 	"renameViewContainers": {
-		"flutter": {
-			"title": "Dart Native"
-		},
 		"sidebarDevToolsContainer": {
-			"title": "Dart Native DevTools"
+			"title": "Dart Native",
+			"icon": "media/icons/sidebar/flutter.svg"
 		}
 	},
 	"removeViews": [
+		"dartFlutterSidebar",
 		"flutterPropertyEditor",
 		"sidebarDevToolsCpuProfiler",
 		"sidebarDevToolsPerformance",
@@ -62,17 +62,14 @@
 		"sidebarWidgetPreview"
 	],
 	"renameViews": {
-		"dartFlutterSidebar": {
-			"name": "Dart Native Sidebar"
-		},
 		"sidebarDevToolsMemory": {
-			"contextualTitle": "Dart Native DevTools: Memory"
+			"contextualTitle": "Dart Native: Memory"
 		},
 		"sidebarDevToolsNetwork": {
-			"contextualTitle": "Dart Native DevTools: Network"
+			"contextualTitle": "Dart Native: Network"
 		},
 		"sidebarDevToolsLogging": {
-			"contextualTitle": "Dart Native DevTools: Logging"
+			"contextualTitle": "Dart Native: Logging"
 		}
 	},
 	"disabledCommands": [
