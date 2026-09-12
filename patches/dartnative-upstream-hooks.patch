@@ -826,7 +826,7 @@ index 71877abe..7bf94380 100644
  	get evaluateToStringInDebugViews(): boolean { return this.getConfig<boolean>("evaluateToStringInDebugViews", true); }
  
 diff --git a/src/extension/extension.ts b/src/extension/extension.ts
-index 4bc3697d..f83fe37a 100644
+index 4bc3697d..4413995e 100644
 --- a/src/extension/extension.ts
 +++ b/src/extension/extension.ts
 @@ -52,6 +52,7 @@ import { PackageCommands } from "./commands/packages";
@@ -875,6 +875,15 @@ index 4bc3697d..f83fe37a 100644
  	// Warn the user if they've opened a folder with mismatched casing.
  	if (vs.workspace.workspaceFolders?.length) {
  		for (const wf of vs.workspace.workspaceFolders) {
+@@ -909,7 +925,7 @@ export async function deactivate(isRestart = false, reason: ExtensionRestartReas
+ function setCommandVisiblity(enable: boolean, workspaceContext?: WorkspaceContext) {
+ 	void vs.commands.executeCommand("setContext", PROJECT_LOADED, enable);
+ 	void vs.commands.executeCommand("setContext", DART_PROJECT_LOADED, enable && workspaceContext?.hasAnyStandardDartProjects);
+-	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && workspaceContext?.hasAnyFlutterProjects);
++	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && (workspaceContext?.hasAnyFlutterProjects || workspaceContext?.hasAnyDartNativeProjects));
+ 	void vs.commands.executeCommand("setContext", WEB_PROJECT_LOADED, enable && workspaceContext?.hasAnyWebProjects);
+ }
+ 
 diff --git a/src/extension/providers/debug_adapter_descriptor_factory.ts b/src/extension/providers/debug_adapter_descriptor_factory.ts
 index bdb69fa6..27eb416c 100644
 --- a/src/extension/providers/debug_adapter_descriptor_factory.ts
@@ -1152,7 +1161,7 @@ index d2813240..3ed290f6 100644
  
  		const line = document.lineAt(position.line).text.slice(0, position.character);
 diff --git a/src/extension/sdk/dev_tools/manager.ts b/src/extension/sdk/dev_tools/manager.ts
-index 83d57f88..e376559c 100644
+index 83d57f88..218eee28 100644
 --- a/src/extension/sdk/dev_tools/manager.ts
 +++ b/src/extension/sdk/dev_tools/manager.ts
 @@ -28,6 +28,7 @@ import { ExtensionRecommentations } from "../../recommendations/recommendations"
@@ -1192,7 +1201,20 @@ index 83d57f88..e376559c 100644
  		if (page.requiresFlutter && !this.context.workspaceContext.hasAnyFlutterProjects)
  			return false;
  		if (page.requiredDartSdkVersion && this.context.workspaceContext.sdks.dartVersion && !versionIsAtLeast(this.context.workspaceContext.sdks.dartVersion, page.requiredDartSdkVersion))
-@@ -333,6 +355,10 @@ export class DevToolsManager implements IAmDisposable {
+@@ -167,7 +189,11 @@ export class DevToolsManager implements IAmDisposable {
+ 		const base = await this.devtoolsUrl;
+ 		if (!base) return base;
+ 
+-		const queryString = this.buildQueryString(this.getDefaultQueryParams());
++		const queryParams = this.getDefaultQueryParams();
++		if (this.isDartNativeEnvironment() || page === "editorSidebar") {
++			queryParams.hide = "inspector,performance,cpu-profiler,deep-links";
++		}
++		const queryString = this.buildQueryString(queryParams);
+ 		const separator = base.endsWith("/") ? "" : "/";
+ 		return `${base}${separator}${page}?${queryString}`;
+ 	}
+@@ -333,6 +359,10 @@ export class DevToolsManager implements IAmDisposable {
  	}
  
  	private getDefaultPage(): DevToolsPage {
@@ -1203,7 +1225,7 @@ index 83d57f88..e376559c 100644
  		// use true for hasSession here, because this page is available with or without if it
  		// meets the version requirements.
  		return this.isPageAvailable(true, devToolsHomePage)
-@@ -358,6 +384,10 @@ export class DevToolsManager implements IAmDisposable {
+@@ -358,6 +388,10 @@ export class DevToolsManager implements IAmDisposable {
  			theme: config.useDevToolsDarkTheme && options.location === "external" ? "dark" : undefined,
  		};
  
@@ -1214,6 +1236,14 @@ index 83d57f88..e376559c 100644
  		const pageId = options.pageId ?? this.getDefaultPage().id;
  		const page = devToolsPages.find((p) => p.id === pageId);
  		const routeId = page ? this.routeIdForPage(page) : pageId;
+@@ -411,6 +445,7 @@ export class DevToolsManager implements IAmDisposable {
+ 			ide: "VSCode",
+ 			dashTool: dashTool(),
+ 			dashIdeName: dashIdeName(),
++			hide: this.isDartNativeEnvironment() ? "inspector,performance,cpu-profiler,deep-links" : undefined,
+ 		};
+ 	}
+ 
 diff --git a/src/extension/sdk/utils.ts b/src/extension/sdk/utils.ts
 index 87d7e68a..f39c79dd 100644
 --- a/src/extension/sdk/utils.ts
