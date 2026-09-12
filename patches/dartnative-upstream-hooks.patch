@@ -811,10 +811,115 @@ index 8e18b39b..94c6a14e 100644
  			.concat(execution.args);
  
 diff --git a/src/extension/config.ts b/src/extension/config.ts
-index 71877abe..7bf94380 100644
+index 71877abe..32b4181d 100644
 --- a/src/extension/config.ts
 +++ b/src/extension/config.ts
-@@ -106,6 +106,10 @@ class Config {
+@@ -6,46 +6,90 @@ import { resolvePaths } from "../shared/vscode/utils";
+ import { DevToolsLocations, DevToolsLocationsWithDefault } from "./sdk/dev_tools/manager";
+ import { insertWorkspaceName } from "./utils";
+ 
++const renamedSettingKeys: Record<string, string> = {
++	flutterAdditionalArgs: "dartNativeAdditionalArgs",
++	flutterCreatePlatforms: "dartNativeCreatePlatforms",
++	flutterCreatePromptForPlatforms: "dartNativeCreatePromptForPlatforms",
++	flutterGutterIcons: "dartNativeGutterIcons",
++	flutterHotReloadOnSave: "dartNativeHotReloadOnSave",
++	flutterRememberSelectedDevice: "dartNativeRememberSelectedDevice",
++	flutterRunAdditionalArgs: "dartNativeRunAdditionalArgs",
++	flutterScreenshotPath: "dartNativeScreenshotPath",
++	flutterSelectDeviceWhenConnected: "dartNativeSelectDeviceWhenConnected",
++	flutterShowEmulators: "dartNativeShowEmulators",
++	flutterTestAdditionalArgs: "dartNativeTestAdditionalArgs",
++	flutterSdkPath: "dartNativeSdkPath",
++	flutterSdkPaths: "dartNativeSdkPaths",
++	flutterDaemonLogFile: "dartNativeDaemonLogFile",
++};
++
++const legacySettingKeys: Record<string, string> = Object.fromEntries(
++	Object.entries(renamedSettingKeys).map(([legacy, modern]) => [modern, legacy]),
++);
++
+ class Config {
+ 	private config: WorkspaceConfiguration;
++	private configX: WorkspaceConfiguration;
+ 
+ 	// TODO(dantup): We might not need defaults here, they are read from package.json!
+ 
+ 	constructor() {
+ 		this.config = workspace.getConfiguration("dart");
++		this.configX = workspace.getConfiguration("dartx");
+ 	}
+ 
+ 	public reload() {
+ 		this.config = workspace.getConfiguration("dart");
++		this.configX = workspace.getConfiguration("dartx");
+ 	}
+ 
+ 	private getConfig<T>(key: string, defaultValue: T): NullAsUndefined<T> {
+-		const value = this.config.get<T>(key, defaultValue);
+-		return nullToUndefined(value);
+-	}
++		const modernKey = renamedSettingKeys[key] ?? key;
++		const legacyKey = legacySettingKeys[key] ?? key;
+ 
+-	private getWorkspaceConfig<T>(key: string): NullAsUndefined<T> {
+-		const c = this.config.inspect<T>(key);
++		for (const [cfg, k] of [[this.configX, modernKey], [this.configX, legacyKey], [this.config, modernKey], [this.config, legacyKey]] as const) {
++			const ins = cfg.inspect<T>(k);
++			const val = ins?.workspaceFolderValue ?? ins?.workspaceValue ?? ins?.globalValue;
++			if (val !== undefined)
++				return (val === null ? undefined : val) as NullAsUndefined<T>;
++		}
+ 
+-		if (c?.workspaceValue)
+-			return c.workspaceValue;
++		const val = this.configX.get<T>(modernKey);
++		if (val !== undefined)
++			return (val === null ? undefined : val) as NullAsUndefined<T>;
+ 
+-		if (c?.workspaceFolderValue) {
+-			return c.workspaceFolderValue;
++		return nullToUndefined(this.config.get<T>(legacyKey, defaultValue));
++	}
++
++	private getWorkspaceConfig<T>(key: string): NullAsUndefined<T> {
++		const modernKey = renamedSettingKeys[key] ?? key;
++		const legacyKey = legacySettingKeys[key] ?? key;
++		for (const [cfg, k] of [[this.configX, modernKey], [this.configX, legacyKey], [this.config, modernKey], [this.config, legacyKey]] as const) {
++			const c = cfg.inspect<T>(k);
++			if (c?.workspaceValue !== undefined)
++				return nullToUndefined(c.workspaceValue as T);
++			if (c?.workspaceFolderValue !== undefined)
++				return nullToUndefined(c.workspaceFolderValue as T);
+ 		}
+ 
+ 		return undefined as NullAsUndefined<T>;
+ 	}
+ 
+ 	private hasExplicitSetting(key: string): boolean {
+-		const result = this.config.inspect(key);
+-		return result?.globalValue !== undefined
+-			|| result?.workspaceValue !== undefined
+-			|| result?.workspaceValue !== undefined;
++		const modernKey = renamedSettingKeys[key] ?? key;
++		const legacyKey = legacySettingKeys[key] ?? key;
++		for (const [cfg, k] of [[this.configX, modernKey], [this.configX, legacyKey], [this.config, modernKey], [this.config, legacyKey]] as const) {
++			const result = cfg.inspect(k);
++			if (result?.globalValue !== undefined || result?.workspaceValue !== undefined || result?.workspaceFolderValue !== undefined)
++				return true;
++		}
++
++		return false;
+ 	}
+ 
+ 	private async setConfig<T>(key: string, value: T, target: ConfigurationTarget): Promise<void> {
+-		await this.config.update(key, value, target);
++		const modernKey = renamedSettingKeys[key] ?? key;
++		await this.configX.update(modernKey, value, target);
+ 	}
+ 
+ 	get addSdkToTerminalPath(): boolean { return this.getConfig<boolean>("addSdkToTerminalPath", true); }
+@@ -106,6 +150,10 @@ class Config {
  	get enableSdkFormatter(): boolean { return this.getConfig<boolean>("enableSdkFormatter", true); }
  	get enableServerSnippets(): boolean { return this.getConfig<boolean>("enableServerSnippets", true); }
  	get enableSnippets(): boolean { return this.getConfig<boolean>("enableSnippets", true); }
@@ -825,6 +930,110 @@ index 71877abe..7bf94380 100644
  	get env(): object { return this.getConfig<object>("env", {}); }
  	get evaluateToStringInDebugViews(): boolean { return this.getConfig<boolean>("evaluateToStringInDebugViews", true); }
  
+@@ -222,6 +270,21 @@ class Config {
+ 		return this.hasExplicitSetting("showTodos");
+ 	}
+ 
++	get dartNativeAdditionalArgs(): string[] { return this.for().dartNativeAdditionalArgs; }
++	get dartNativeCreatePlatforms(): string[] | undefined { return this.flutterCreatePlatforms; }
++	get dartNativeCreatePromptForPlatforms(): boolean { return this.flutterCreatePromptForPlatforms; }
++	get dartNativeDaemonLogFile(): undefined | string { return this.flutterDaemonLogFile; }
++	get dartNativeGutterIcons(): boolean { return this.flutterGutterIcons; }
++	get dartNativeHotReloadOnSave(): "never" | "manual" | "manualIfDirty" | "all" | "allIfDirty" { return this.flutterHotReloadOnSave; }
++	get dartNativeRememberSelectedDevice(): boolean { return this.flutterRememberSelectedDevice; }
++	get dartNativeRunAdditionalArgs(): string[] { return this.for().dartNativeRunAdditionalArgs; }
++	get dartNativeScreenshotPath(): undefined | string { return this.flutterScreenshotPath; }
++	get dartNativeSdkPath(): undefined | string { return this.flutterSdkPath; }
++	get dartNativeSdkPaths(): string[] { return this.flutterSdkPaths; }
++	get dartNativeSelectDeviceWhenConnected(): boolean { return this.flutterSelectDeviceWhenConnected; }
++	get dartNativeShowEmulators(): "local" | "always" | "never" { return this.flutterShowEmulators; }
++	get dartNativeTestAdditionalArgs(): string[] { return this.for().dartNativeTestAdditionalArgs; }
++
+ 	// Options that can be set programatically.
+ 	public setShowDebuggerNumbersAsHex(value: true | undefined): Promise<void> { return this.setConfig("showDebuggerNumbersAsHex", value, ConfigurationTarget.Global); }
+ 	public setCheckForSdkUpdates(value: boolean): Promise<void> { return this.setConfig("checkForSdkUpdates", value, ConfigurationTarget.Global); }
+@@ -231,10 +294,12 @@ class Config {
+ 	public setFlutterCreatePlatforms(value: string[] | undefined): Promise<void> { return this.setConfig("flutterCreatePlatforms", value, ConfigurationTarget.Global); }
+ 	public setFlutterCreatePromptForPlatforms(value: boolean | undefined): Promise<void> { return this.setConfig("flutterCreatePromptForPlatforms", value, ConfigurationTarget.Global); }
+ 	public setFlutterSdkPath(value: string | undefined, target: ConfigurationTarget): Promise<void> { return this.setConfig("flutterSdkPath", value, target); }
++	public setDartNativeSdkPath(value: string | undefined, target: ConfigurationTarget): Promise<void> { return this.setConfig("dartNativeSdkPath", value, target); }
+ 	public setGlobalDartSdkPath(value: string): Promise<void> { return this.setConfig("sdkPath", value, ConfigurationTarget.Global); }
+ 	public setGlobalDebugSdkLibraries(value: boolean): Promise<void> { return this.setConfig("debugSdkLibraries", value, ConfigurationTarget.Global); }
+ 	public setGlobalDebugExternalPackageLibraries(value: boolean): Promise<void> { return this.setConfig("debugExternalPackageLibraries", value, ConfigurationTarget.Global); }
+ 	public setGlobalFlutterSdkPath(value: string): Promise<void> { return this.setConfig("flutterSdkPath", value, ConfigurationTarget.Global); }
++	public setGlobalDartNativeSdkPath(value: string): Promise<void> { return this.setConfig("dartNativeSdkPath", value, ConfigurationTarget.Global); }
+ 	public setOffline(value: boolean | undefined): Promise<void> { return this.setConfig("offline", value, ConfigurationTarget.Global); }
+ 	public setOpenDevTools(value: "never" | "flutter" | "always" | undefined): Promise<void> { return this.setConfig("openDevTools", value, ConfigurationTarget.Global); }
+ 	public setShowInspectorNotificationsForWidgetErrors(value: boolean): Promise<void> { return this.setConfig("showInspectorNotificationsForWidgetErrors", value, ConfigurationTarget.Global); }
+@@ -260,24 +325,49 @@ class ResolvedConfig {
+ 	private readonly dartConfig = workspace.getConfiguration("", this.dummyDartFile).get("[dart]") as any;
+ 
+ 	public getAppliedConfig<T>(section: string, key: string, isResourceScoped = true): T | undefined {
+-		const dartValue = this.dartConfig ? this.dartConfig[`${section}.${key}`] : undefined;
+-		return dartValue !== undefined && dartValue !== null
+-			? dartValue as T
+-			: workspace.getConfiguration(section, isResourceScoped ? this.dummyDartFile : undefined).get(key);
++		const modernKey = renamedSettingKeys[key] ?? key;
++		const legacyKey = legacySettingKeys[key] ?? key;
++		const dartValue = this.dartConfig ? (this.dartConfig[`${section}.${modernKey}`] ?? this.dartConfig[`${section}.${legacyKey}`]) : undefined;
++		if (dartValue !== undefined && dartValue !== null)
++			return dartValue as T;
++
++		if (section === "dart") {
++			const xVal = workspace.getConfiguration("dartx", isResourceScoped ? this.dummyDartFile : undefined).get<T>(modernKey);
++			if (xVal !== undefined && xVal !== null)
++				return xVal;
++		}
++
++		return workspace.getConfiguration(section, isResourceScoped ? this.dummyDartFile : undefined).get(key);
+ 	}
+ }
+ 
+ export class ResourceConfig {
+ 	public uri?: Uri;
+ 	public config: WorkspaceConfiguration;
++	public configX: WorkspaceConfiguration;
+ 
+ 	constructor(uri?: Uri) {
+ 		this.uri = uri;
+ 		this.config = workspace.getConfiguration("dart", this.uri);
++		this.configX = workspace.getConfiguration("dartx", this.uri);
+ 	}
+ 
+ 	private getConfig<T>(key: string, defaultValue: T): NullAsUndefined<T> {
+-		return nullToUndefined(this.config.get<T>(key, defaultValue));
++		const modernKey = renamedSettingKeys[key] ?? key;
++		const legacyKey = legacySettingKeys[key] ?? key;
++
++		for (const [cfg, k] of [[this.configX, modernKey], [this.configX, legacyKey], [this.config, modernKey], [this.config, legacyKey]] as const) {
++			const ins = cfg.inspect<T>(k);
++			const val = ins?.workspaceFolderValue ?? ins?.workspaceValue ?? ins?.globalValue;
++			if (val !== undefined)
++				return (val === null ? undefined : val) as NullAsUndefined<T>;
++		}
++
++		const val = this.configX.get<T>(modernKey);
++		if (val !== undefined)
++			return (val === null ? undefined : val) as NullAsUndefined<T>;
++
++		return nullToUndefined(this.config.get<T>(legacyKey, defaultValue));
+ 	}
+ 
+ 	get analysisExcludedFolders(): string[] { return this.getConfig<string[]>("analysisExcludedFolders", []); }
+@@ -303,6 +393,13 @@ export class ResourceConfig {
+ 	get flutterSdkPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterSdkPath", null)); }
+ 	get flutterSdkPaths(): string[] { return this.getConfig<string[]>("flutterSdkPaths", []).map(resolvePaths); }
+ 	get flutterTestAdditionalArgs(): string[] { return this.getConfig<string[]>("flutterTestAdditionalArgs", []); }
++	get dartNativeAdditionalArgs(): string[] { return this.flutterAdditionalArgs; }
++	get dartNativeDaemonLogFile(): undefined | string { return this.flutterDaemonLogFile; }
++	get dartNativeRunAdditionalArgs(): string[] { return this.flutterRunAdditionalArgs; }
++	get dartNativeScreenshotPath(): undefined | string { return this.flutterScreenshotPath; }
++	get dartNativeSdkPath(): undefined | string { return this.flutterSdkPath; }
++	get dartNativeSdkPaths(): string[] { return this.flutterSdkPaths; }
++	get dartNativeTestAdditionalArgs(): string[] { return this.flutterTestAdditionalArgs; }
+ 	get hotReloadPatterns(): string[] { return this.getConfig<string[]>("hotReloadPatterns", []); }
+ 	get insertArgumentPlaceholders(): boolean { return this.getConfig<boolean>("insertArgumentPlaceholders", true); }
+ 	get lineLength(): number { return this.getConfig<number>("lineLength", 80); }
 diff --git a/src/extension/extension.ts b/src/extension/extension.ts
 index 4bc3697d..4413995e 100644
 --- a/src/extension/extension.ts

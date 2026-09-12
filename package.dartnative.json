@@ -109,6 +109,7 @@
 		"dart.webDaemonLogFile",
 		"dart.customFlutterDapPath",
 		"dart.previewFlutterUiGuidesCustomTracking",
+		"dart.previewFlutterUiGuides",
 		"dart.flutterAttachAdditionalArgs",
 		"dart.flutterCreateAndroidLanguage",
 		"dart.flutterCreateIOSLanguage",
@@ -122,12 +123,28 @@
 	"renameConfigurationSections": {
 		"Flutter": "DartNative"
 	},
+	"configurationKeyRenames": {
+		"dart.flutterAdditionalArgs": "dart.dartNativeAdditionalArgs",
+		"dart.flutterCreatePlatforms": "dart.dartNativeCreatePlatforms",
+		"dart.flutterCreatePromptForPlatforms": "dart.dartNativeCreatePromptForPlatforms",
+		"dart.flutterGutterIcons": "dart.dartNativeGutterIcons",
+		"dart.flutterHotReloadOnSave": "dart.dartNativeHotReloadOnSave",
+		"dart.flutterRememberSelectedDevice": "dart.dartNativeRememberSelectedDevice",
+		"dart.flutterRunAdditionalArgs": "dart.dartNativeRunAdditionalArgs",
+		"dart.flutterScreenshotPath": "dart.dartNativeScreenshotPath",
+		"dart.flutterSelectDeviceWhenConnected": "dart.dartNativeSelectDeviceWhenConnected",
+		"dart.flutterShowEmulators": "dart.dartNativeShowEmulators",
+		"dart.flutterTestAdditionalArgs": "dart.dartNativeTestAdditionalArgs",
+		"dart.flutterSdkPath": "dart.dartNativeSdkPath",
+		"dart.flutterSdkPaths": "dart.dartNativeSdkPaths",
+		"dart.flutterDaemonLogFile": "dart.dartNativeDaemonLogFile"
+	},
 	"configurationPropertyOverrides": {
 		"dart.flutterAdditionalArgs": {
-			"description": "Additional arguments to pass to `dartnative` and `flutter` commands, including daemon processes. Arguments are passed directly to `dn` or `flutter`."
+			"description": "Additional arguments to pass to `dartnative` commands, including the daemon. Arguments are passed directly to `dn`."
 		},
 		"dart.flutterRunAdditionalArgs": {
-			"description": "Additional arguments to pass when running `dartnative` or `flutter` applications in debug or run mode. Arguments are passed directly to `dn run` or `flutter run`."
+			"description": "Additional arguments to pass when running `dartnative` applications in debug or run mode. Arguments are passed directly to `dn run`."
 		},
 		"dart.flutterCreatePlatforms": {
 			"default": [
@@ -156,13 +173,13 @@
 			"description": "Whether to automatically send a Hot Reload request to DartNative apps during a debug session when saving files. Dart apps are controlled by the hotReloadOnSave setting."
 		},
 		"dart.hotReloadOnSave": {
-			"description": "Whether to automatically send a Hot Reload request to Dart apps during a debug session when saving files. DartNative apps are controlled by the flutterHotReloadOnSave setting."
+			"description": "Whether to automatically send a Hot Reload request to Dart apps during a debug session when saving files. DartNative apps are controlled by the dartNativeHotReloadOnSave setting."
 		},
 		"dart.flutterScreenshotPath": {
 			"description": "The path to a directory to save DartNative screenshots. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
 		},
 		"dart.flutterRememberSelectedDevice": {
-			"description": "Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dart.flutterSelectDeviceWhenConnected#` setting)."
+			"description": "Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dart.dartNativeSelectDeviceWhenConnected#` setting)."
 		},
 		"dart.flutterSelectDeviceWhenConnected": {
 			"description": "Whether to set newly connected devices as the current device in DartNative projects."
@@ -171,16 +188,16 @@
 			"description": "When to show DartNative emulators. These are usually hidden for remote workspaces because it is usually not possible to see or interact with emulators in a remote session. If you are using remoting/containers in a way that you can interact with launched emulator processes, you may wish to set this to 'always'."
 		},
 		"dart.flutterTestAdditionalArgs": {
-			"description": "Additional args to pass to the `flutter test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects."
+			"description": "Additional args to pass to the `dartnative test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects."
 		},
 		"dart.flutterDaemonLogFile": {
-			"description": "The path to a log file for the `flutter daemon` service, which provides information about connected devices accessible from the status bar. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
+			"description": "The path to a log file for the `dartnative daemon` service, which provides information about connected devices accessible from the status bar. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
 		},
 		"dart.flutterSdkPath": {
-			"description": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and Flutter SDK are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
+			"description": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
 		},
 		"dart.flutterSdkPaths": {
-			"description": "An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and Flutter SDK are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
+			"description": "An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and runtime are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
 		},
 		"dart.openDevTools": {
 			"description": "Whether to automatically open DevTools at the start of a debug session.",
@@ -190,8 +207,35 @@
 				"Automatically launch DevTools when starting any debug session"
 			]
 		},
-		"dart.previewFlutterUiGuides": {
-			"markdownDescription": "EXPERIMENTAL: Whether to enable DartNative UI Guides in the editor."
+		"dart.addSdkToTerminalPath": {
+			"description": "Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartx.dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart)."
+		},
+		"dart.allowTestsOutsideTestFolder": {
+			"description": "Whether to consider files ending `_test.dart` that are outside of the test directory as tests. This should be enabled if you put tests inside the `lib` directory of your DartNative app so they will be run with test commands."
+		},
+		"dart.projectSearchDepth": {
+			"description": "How many levels (including the workspace roots) down the workspace to search for Dart/DartNative projects. Increasing this number may help detect DartNative projects that are deeply nested in your workspace but slow down all operations that search for projects, including extension activation (requires restart)."
+		},
+		"dart.env": {
+			"description": "Additional environment variables to be added to all Dart/DartNative processes spawned by the DartX extension."
+		},
+		"dart.enableSnippets": {
+			"description": "Whether to include Dart and DartNative snippets in code completion."
+		},
+		"dart.debugExternalPackageLibraries": {
+			"description": "Whether to mark external pub package libraries (including `package:dartnative`) as debuggable, enabling stepping into them while debugging."
+		},
+		"dart.toolingDaemonLogFile": {
+			"description": "The path to a log file for the `dart tooling-daemon` service, which coordinates between various Dart and DartNative tools and extensions. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
+		},
+		"dart.dapLogFile": {
+			"description": "The path to a log file for communication with the DAP debug adapters. This is useful when trying to diagnose issues with debugging such as missed breakpoints. Use `${name}` in the log file name to insert the Debug Session name to prevent concurrent debug sessions overwriting each others logs. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `${kind}` to insert a description of the kind of debug session ('dart', 'dart_test', 'dartnative' etc.). Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
+		},
+		"dart.includeDependenciesInWorkspaceSymbols": {
+			"description": "Whether to include symbols from the SDK and package dependencies in the \"Go to Symbol in Workspace\" (`cmd/ctrl`+`T`) list. This can only be disabled when using Dart 3.0 or later."
+		},
+		"dart.daemonPort": {
+			"description": "EXPERIMENTAL: The port where the daemon can be accessed if daemon is run remotely. This setting is intended for use by developers."
 		}
 	},
 	"configurationPropertiesBySection": {

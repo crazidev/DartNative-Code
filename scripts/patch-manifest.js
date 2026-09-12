@@ -57,14 +57,14 @@ const OVERLAY_PATH = path.join(ROOT, "package.dartnative.json");
 const BACKUP_PATH = path.join(ROOT, "package.json.upstream");
 const isDryRun = process.argv.includes("--check");
 function main() {
-    // Load files.
-    const pkg = JSON.parse(fs.readFileSync(PKG_PATH, "utf8"));
-    const overlay = JSON.parse(fs.readFileSync(OVERLAY_PATH, "utf8"));
     // Backup the original if not already done.
     if (!fs.existsSync(BACKUP_PATH)) {
         fs.copyFileSync(PKG_PATH, BACKUP_PATH);
         console.log("  ✓ Backed up original package.json → package.json.upstream");
     }
+    // Always load from pristine upstream backup to ensure idempotent patching.
+    const pkg = JSON.parse(fs.readFileSync(BACKUP_PATH, "utf8"));
+    const overlay = JSON.parse(fs.readFileSync(OVERLAY_PATH, "utf8"));
     // 1. Apply top-level field overrides.
     for (const field of ["name", "displayName", "description"]) {
         if (overlay[field]) {
@@ -238,7 +238,15 @@ function main() {
         for (const config of configs) {
             if (config.properties && config.properties[propKey]) {
                 console.log(`  → overriding configuration property: ${propKey}`);
-                Object.assign(config.properties[propKey], overrides);
+                const target = config.properties[propKey];
+                // If an override specifies description, ensure markdownDescription does not keep stale text.
+                if (overrides.description && !overrides.markdownDescription && target.markdownDescription) {
+                    target.markdownDescription = overrides.description;
+                }
+                if (overrides.markdownDescription && !overrides.description && target.description) {
+                    target.description = overrides.markdownDescription;
+                }
+                Object.assign(target, overrides);
             }
         }
     }
@@ -275,6 +283,49 @@ function main() {
         pkg.contributes = pkg.contributes || {};
         pkg.contributes.snippets = overlay.snippets;
         console.log(`  → adding contributes.snippets (${overlay.snippets.length} entries)`);
+    }
+    // 13.5 Rename configuration property keys (e.g. dart.flutterAdditionalArgs -> dart.dartNativeAdditionalArgs).
+    const keyRenames = overlay.configurationKeyRenames || {};
+    if (Object.keys(keyRenames).length > 0) {
+        for (const config of configs) {
+            if (config.properties) {
+                for (const [oldKey, newKey] of Object.entries(keyRenames)) {
+                    if (config.properties[oldKey]) {
+                        console.log(`  → renaming configuration key: ${oldKey} → ${newKey}`);
+                        config.properties[newKey] = config.properties[oldKey];
+                        delete config.properties[oldKey];
+                    }
+                }
+            }
+        }
+        // Update cross-references in descriptions: #dart.flutterRunAdditionalArgs# -> #dart.dartNativeRunAdditionalArgs#
+        for (const config of configs) {
+            if (config.properties) {
+                for (const val of Object.values(config.properties)) {
+                    for (const [oldKey, newKey] of Object.entries(keyRenames)) {
+                        if (typeof val.description === "string" && val.description.includes(`#${oldKey}#`)) {
+                            val.description = val.description.split(`#${oldKey}#`).join(`#${newKey}#`);
+                        }
+                        if (typeof val.markdownDescription === "string" && val.markdownDescription.includes(`#${oldKey}#`)) {
+                            val.markdownDescription = val.markdownDescription.split(`#${oldKey}#`).join(`#${newKey}#`);
+                        }
+                    }
+                }
+            }
+        }
+        // Update when clauses in menus that check config.dart.<oldKey>
+        const menus = pkg.contributes?.menus || {};
+        for (const menuItems of Object.values(menus)) {
+            if (Array.isArray(menuItems)) {
+                for (const entry of menuItems) {
+                    for (const [oldKey, newKey] of Object.entries(keyRenames)) {
+                        if (typeof entry.when === "string" && entry.when.includes(`config.${oldKey}`)) {
+                            entry.when = entry.when.split(`config.${oldKey}`).join(`config.${newKey}`);
+                        }
+                    }
+                }
+            }
+        }
     }
     // 14. Rename configuration setting prefix (e.g. dart. -> dartx.) so that
     // VS Code Settings editor headings display "DartX: <Setting Title>".
