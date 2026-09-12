@@ -1730,6 +1730,18 @@ index 681c1b1d..d63730e3 100644
  });
  
  
+diff --git a/tsconfig.build.json b/tsconfig.build.json
+index f4dbb6ec..8f96b050 100644
+--- a/tsconfig.build.json
++++ b/tsconfig.build.json
+@@ -8,6 +8,7 @@
+ 		".vscode-test",
+ 		"node_modules",
+ 		"out",
++		"scripts",
+ 		"src/debug",
+ 		"src/extension",
+ 		"src/test/test_projects"
 diff --git a/tsconfig.json b/tsconfig.json
 index 78bbc2de..d14eccb0 100644
 --- a/tsconfig.json

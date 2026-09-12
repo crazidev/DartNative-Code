@@ -207,23 +207,114 @@ function main() {
             }
         }
     }
-    // 9. Add or update configuration properties.
-    const configProps = overlay.configurationProperties || {};
+    // 9. Remove unwanted configuration properties.
+    const removeConfigProps = new Set(overlay.removeConfigurationProperties || []);
     const configs = Array.isArray(pkg.contributes?.configuration)
         ? pkg.contributes.configuration
         : [pkg.contributes?.configuration];
-    const targetConfig = configs.find((c) => c?.title === "Editor") || configs[0];
-    if (targetConfig?.properties) {
-        for (const [propKey, propVal] of Object.entries(configProps)) {
-            console.log(`  → adding configuration property: ${propKey}`);
-            targetConfig.properties[propKey] = propVal;
+    if (removeConfigProps.size > 0) {
+        for (const config of configs) {
+            if (config.properties) {
+                for (const propKey of Object.keys(config.properties)) {
+                    if (removeConfigProps.has(propKey)) {
+                        console.log(`  → removing configuration property: ${propKey}`);
+                        delete config.properties[propKey];
+                    }
+                }
+            }
         }
     }
-    // 10. Add snippets if configured in overlay.
+    // 10. Rename configuration sections.
+    const renameSections = overlay.renameConfigurationSections || {};
+    for (const config of configs) {
+        if (config.title && renameSections[config.title]) {
+            console.log(`  → configuration section title: "${config.title}" → "${renameSections[config.title]}"`);
+            config.title = renameSections[config.title];
+        }
+    }
+    // 11. Apply configuration property overrides.
+    const propOverrides = overlay.configurationPropertyOverrides || {};
+    for (const [propKey, overrides] of Object.entries(propOverrides)) {
+        for (const config of configs) {
+            if (config.properties && config.properties[propKey]) {
+                console.log(`  → overriding configuration property: ${propKey}`);
+                Object.assign(config.properties[propKey], overrides);
+            }
+        }
+    }
+    // 12. Add or update configuration properties by section.
+    const propsBySection = overlay.configurationPropertiesBySection || {};
+    for (const [sectionTitle, props] of Object.entries(propsBySection)) {
+        let targetSection = configs.find((c) => c?.title === sectionTitle);
+        if (!targetSection) {
+            console.log(`  → creating new configuration section: "${sectionTitle}"`);
+            targetSection = { title: sectionTitle, properties: {} };
+            if (Array.isArray(pkg.contributes?.configuration))
+                pkg.contributes.configuration.push(targetSection);
+            else
+                pkg.contributes.configuration = [pkg.contributes.configuration, targetSection];
+        }
+        for (const [propKey, propVal] of Object.entries(props)) {
+            console.log(`  → adding configuration property [${sectionTitle}]: ${propKey}`);
+            targetSection.properties[propKey] = propVal;
+        }
+    }
+    // Legacy fallback: configurationProperties adds to "Editor" section if not specified in configurationPropertiesBySection.
+    const legacyConfigProps = overlay.configurationProperties || {};
+    if (Object.keys(legacyConfigProps).length > 0 && !overlay.configurationPropertiesBySection) {
+        const editorSection = configs.find((c) => c?.title === "Editor") || configs[0];
+        if (editorSection?.properties) {
+            for (const [propKey, propVal] of Object.entries(legacyConfigProps)) {
+                console.log(`  → adding configuration property [Editor]: ${propKey}`);
+                editorSection.properties[propKey] = propVal;
+            }
+        }
+    }
+    // 13. Add snippets if configured in overlay.
     if (Array.isArray(overlay.snippets)) {
         pkg.contributes = pkg.contributes || {};
         pkg.contributes.snippets = overlay.snippets;
         console.log(`  → adding contributes.snippets (${overlay.snippets.length} entries)`);
+    }
+    // 14. Rename configuration setting prefix (e.g. dart. -> dartx.) so that
+    // VS Code Settings editor headings display "DartX: <Setting Title>".
+    if (overlay.settingPrefixRename) {
+        const { fromPrefix, toPrefix } = overlay.settingPrefixRename;
+        console.log(`  → renaming configuration setting prefix: "${fromPrefix}" → "${toPrefix}"`);
+        for (const config of configs) {
+            if (config.properties) {
+                const oldEntries = Object.entries(config.properties);
+                config.properties = {};
+                for (const [key, val] of oldEntries) {
+                    const newKey = key.startsWith(fromPrefix) ? toPrefix + key.slice(fromPrefix.length) : key;
+                    config.properties[newKey] = val;
+                }
+            }
+        }
+        // Update internal setting references in descriptions: #dart.foo# -> #dartx.foo#
+        for (const config of configs) {
+            if (config.properties) {
+                for (const val of Object.values(config.properties)) {
+                    if (typeof val.description === "string") {
+                        val.description = val.description.replace(new RegExp(`#${fromPrefix}`, "g"), `#${toPrefix}`);
+                    }
+                    if (typeof val.markdownDescription === "string") {
+                        val.markdownDescription = val.markdownDescription.replace(new RegExp(`#${fromPrefix}`, "g"), `#${toPrefix}`);
+                    }
+                }
+            }
+        }
+        // Update when clauses in menus that check config.dart.*
+        const menus = pkg.contributes?.menus || {};
+        for (const menuItems of Object.values(menus)) {
+            if (Array.isArray(menuItems)) {
+                for (const entry of menuItems) {
+                    if (typeof entry.when === "string" && entry.when.includes(`config.${fromPrefix}`)) {
+                        entry.when = entry.when.replace(new RegExp(`config\\.${fromPrefix}`, "g"), `config.${toPrefix}`);
+                    }
+                }
+            }
+        }
     }
     const patched = JSON.stringify(pkg, null, "\t") + "\n";
     if (isDryRun) {

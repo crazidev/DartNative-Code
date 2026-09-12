@@ -95,31 +95,136 @@
 		"dart.openDevToolsPerformance",
 		"dart.openObservatory"
 	],
-	"configurationProperties": {
-		"dart.formatAfterRefactoring": {
-			"type": "boolean",
-			"default": true,
-			"markdownDescription": "Whether to automatically format the document after applying refactorings (such as Extract Widget, Wrap with Widget, and state conversions).",
-			"scope": "resource"
+	"removeConfigurationProperties": [
+		"dart.flutterWidgetPreview",
+		"dart.flutterWidgetPreviewLocation",
+		"dart.flutterWidgetPreviewLogFile",
+		"dart.flutterWebRenderer",
+		"dart.flutterShowWebServerDevice",
+		"dart.flutterGenerateLocalizationsOnSave",
+		"dart.flutterAdbConnectOnChromeOs",
+		"dart.useFlutterDev",
+		"dart.showInspectorNotificationsForWidgetErrors",
+		"dart.shareDevToolsWithFlutter",
+		"dart.webDaemonLogFile",
+		"dart.customFlutterDapPath",
+		"dart.previewFlutterUiGuidesCustomTracking",
+		"dart.flutterAttachAdditionalArgs",
+		"dart.flutterCreateAndroidLanguage",
+		"dart.flutterCreateIOSLanguage",
+		"dart.flutterCreateOrganization",
+		"dart.flutterCustomEmulators",
+		"dart.sdkPath",
+		"dart.sdkPaths",
+		"dart.getFlutterSdkCommand",
+		"dart.getDartSdkCommand"
+	],
+	"renameConfigurationSections": {
+		"Flutter": "DartNative"
+	},
+	"configurationPropertyOverrides": {
+		"dart.flutterAdditionalArgs": {
+			"description": "Additional arguments to pass to `dartnative` and `flutter` commands, including daemon processes. Arguments are passed directly to `dn` or `flutter`."
 		},
-		"dart.formatAfterSnippet": {
-			"type": "boolean",
-			"default": true,
-			"markdownDescription": "Whether to automatically format the document after inserting widget snippets (such as `stless` and `stful`).",
-			"scope": "resource"
+		"dart.flutterRunAdditionalArgs": {
+			"description": "Additional arguments to pass when running `dartnative` or `flutter` applications in debug or run mode. Arguments are passed directly to `dn run` or `flutter run`."
 		},
-		"dart.enableWidgetRefactors": {
-			"type": "boolean",
-			"default": true,
-			"markdownDescription": "Whether to enable built-in DartX widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin.",
-			"scope": "resource"
+		"dart.flutterCreatePlatforms": {
+			"default": [
+				"android",
+				"ios"
+			],
+			"description": "The platforms to enable for new projects created using the 'DartNative: Create New Project' command. Only 'android' and 'ios' are supported for DartNative.",
+			"items": {
+				"type": "string",
+				"enum": [
+					"android",
+					"ios"
+				]
+			}
 		},
-		"dart.moveNonFinalFieldsToState": {
-			"type": "boolean",
-			"default": true,
-			"markdownDescription": "When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers.",
-			"scope": "resource"
+		"dart.flutterCreatePromptForPlatforms": {
+			"description": "Whether to prompt for platforms when running 'DartNative: Create New Project'."
+		},
+		"dart.offline": {
+			"description": "Whether to use the --offline switch for commands like 'pub get' and 'DartNative: Create New Project'."
+		},
+		"dart.flutterGutterIcons": {
+			"description": "Whether to show DartNative icons and colors in the editor gutter."
+		},
+		"dart.flutterHotReloadOnSave": {
+			"description": "Whether to automatically send a Hot Reload request to DartNative apps during a debug session when saving files. Dart apps are controlled by the hotReloadOnSave setting."
+		},
+		"dart.hotReloadOnSave": {
+			"description": "Whether to automatically send a Hot Reload request to Dart apps during a debug session when saving files. DartNative apps are controlled by the flutterHotReloadOnSave setting."
+		},
+		"dart.flutterScreenshotPath": {
+			"description": "The path to a directory to save DartNative screenshots. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
+		},
+		"dart.flutterRememberSelectedDevice": {
+			"description": "Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dart.flutterSelectDeviceWhenConnected#` setting)."
+		},
+		"dart.flutterSelectDeviceWhenConnected": {
+			"description": "Whether to set newly connected devices as the current device in DartNative projects."
+		},
+		"dart.flutterShowEmulators": {
+			"description": "When to show DartNative emulators. These are usually hidden for remote workspaces because it is usually not possible to see or interact with emulators in a remote session. If you are using remoting/containers in a way that you can interact with launched emulator processes, you may wish to set this to 'always'."
+		},
+		"dart.flutterTestAdditionalArgs": {
+			"description": "Additional args to pass to the `flutter test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects."
+		},
+		"dart.flutterDaemonLogFile": {
+			"description": "The path to a log file for the `flutter daemon` service, which provides information about connected devices accessible from the status bar. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
+		},
+		"dart.flutterSdkPath": {
+			"description": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and Flutter SDK are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
+		},
+		"dart.flutterSdkPaths": {
+			"description": "An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and Flutter SDK are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
+		},
+		"dart.openDevTools": {
+			"description": "Whether to automatically open DevTools at the start of a debug session.",
+			"enumDescriptions": [
+				"Do not automatically launch DevTools when starting a debug session",
+				"Automatically launch DevTools when starting a DartNative debug session",
+				"Automatically launch DevTools when starting any debug session"
+			]
+		},
+		"dart.previewFlutterUiGuides": {
+			"markdownDescription": "EXPERIMENTAL: Whether to enable DartNative UI Guides in the editor."
 		}
+	},
+	"configurationPropertiesBySection": {
+		"DartNative": {
+			"dart.enableWidgetRefactors": {
+				"type": "boolean",
+				"default": true,
+				"markdownDescription": "Whether to enable built-in DartX widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin.",
+				"scope": "resource"
+			},
+			"dart.formatAfterSnippet": {
+				"type": "boolean",
+				"default": true,
+				"markdownDescription": "Whether to automatically format the document after inserting widget snippets (such as `stless` and `stful`).",
+				"scope": "resource"
+			},
+			"dart.formatAfterRefactoring": {
+				"type": "boolean",
+				"default": true,
+				"markdownDescription": "Whether to automatically format the document after applying refactorings (such as Extract Widget, Wrap with Widget, and state conversions).",
+				"scope": "resource"
+			},
+			"dart.moveNonFinalFieldsToState": {
+				"type": "boolean",
+				"default": true,
+				"markdownDescription": "When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers.",
+				"scope": "resource"
+			}
+		}
+	},
+	"settingPrefixRename": {
+		"fromPrefix": "dart.",
+		"toPrefix": "dartx."
 	},
 	"snippets": [
 		{
