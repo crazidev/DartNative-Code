@@ -1,3 +1,234 @@
+diff --git a/.github/workflows/build-and-test.yml b/.github/workflows/build-and-test.yml
+index fbdc4fb1..a33311d5 100644
+--- a/.github/workflows/build-and-test.yml
++++ b/.github/workflows/build-and-test.yml
+@@ -1,17 +1,14 @@
+ name: Run Tests
+ 
+ on:
+-  push:
+-  pull_request:
+-  schedule:
+-     - cron: '0 6 * * 1' # 6am Monday
++  # push:
++  # pull_request:
++  # schedule:
++  #   - cron: "0 6 * * 1" # 6am Monday
+   workflow_dispatch:
+ 
+ jobs:
+-
+-
+   build_exclusions:
+-
+     # We want to run on external PRs, but not on our own internal PRs as they'll be run
+     # by the push to the branch.
+     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+@@ -37,7 +34,6 @@ jobs:
+         run: echo 'excludes=[{"build-version":"beta"},{"os":"windows-latest"},{"os":"macos-latest"}]' >> $GITHUB_OUTPUT
+ 
+   build:
+-
+     name: "${{ matrix.bot }} (${{ matrix.build-version }} ${{ matrix.os }})"
+     runs-on: ${{ matrix.os }}
+     needs: build_exclusions
+@@ -48,14 +44,26 @@ jobs:
+         os: [ubuntu-latest, windows-latest, macOS-latest]
+         node-version: [22]
+         build-version: [stable, beta]
+-        bot: [flutter_debug, flutter_debug_chrome, flutter_test_debug, dart_web_debug, flutter_repo, dart_debug, dart, flutter, misc, dart-antigravity, dart_debug-antigravity]
++        bot:
++          [
++            flutter_debug,
++            flutter_debug_chrome,
++            flutter_test_debug,
++            dart_web_debug,
++            flutter_repo,
++            dart_debug,
++            dart,
++            flutter,
++            misc,
++            dart-antigravity,
++            dart_debug-antigravity,
++          ]
+         include:
+           - os: ubuntu-latest
+             bot: flutter_snap
+         exclude: ${{ fromJSON(needs.build_exclusions.outputs.excludes) }}
+ 
+     steps:
+-
+       - uses: actions/checkout@v7
+ 
+       # upload-artifact fails if the path does not exist (it only supports
+@@ -333,7 +341,6 @@ jobs:
+             package.json
+ 
+   merge_artifacts:
+-
+     name: Merge Artifacts
+     needs: build
+     # Using always() (to run on failure) will cause us to also run regardless of whether "build" ran, so
+@@ -342,7 +349,6 @@ jobs:
+     runs-on: ubuntu-latest
+ 
+     steps:
+-
+       - name: Merge logs
+         uses: actions/upload-artifact/merge@v7
+         if: always()
+@@ -393,14 +399,12 @@ jobs:
+         continue-on-error: true # fails if empty
+ 
+   upload_coverage:
+-
+     name: Send Coverage to Codecov
+     needs: merge_artifacts
+     if: always() && github.event_name == 'push'
+     runs-on: ubuntu-latest
+ 
+     steps:
+-
+       - uses: actions/checkout@v7
+ 
+       - name: Download coverage
+@@ -416,7 +420,6 @@ jobs:
+           verbose: true
+ 
+   notify_failure:
+-
+     permissions:
+       contents: none
+     name: Notify Discord of Failure
+@@ -425,7 +428,6 @@ jobs:
+     runs-on: ubuntu-latest
+ 
+     steps:
+-
+       - name: Send notification to Discord
+         run: 'Invoke-WebRequest -Headers @{ "Content-Type" = "application/json" } -Method Post -Body "{`"content`":`"Build failed on $($env:GITHUB_REF.Replace(`"refs/heads/`", `"`")): https://github.com/Dart-Code/Dart-Code/commit/$($env:GITHUB_SHA)/checks`"}" -Uri $env:DISCORD_WEBHOOK'
+         shell: pwsh
+diff --git a/.github/workflows/upstream-sync.yml b/.github/workflows/upstream-sync.yml
+new file mode 100644
+index 00000000..950d7303
+--- /dev/null
++++ b/.github/workflows/upstream-sync.yml
+@@ -0,0 +1,115 @@
++name: Upstream Sync Compatibility Check
++
++on:
++  # schedule:
++  # Runs every Monday at 06:00 UTC to catch weekly upstream changes.
++  # - cron: "0 6 * * 1"
++  workflow_dispatch:
++    inputs:
++      upstream_branch:
++        description: "Upstream branch to test against (default: master)"
++        required: false
++        default: "master"
++  pull_request:
++    branches:
++      - "main"
++
++jobs:
++  upstream-sync-check:
++    name: Test upstream Dart-Code compatibility
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++
++    steps:
++      - name: Checkout DartNative branch
++        uses: actions/checkout@v4
++        with:
++          fetch-depth: 0
++
++      - name: Set up Node.js
++        uses: actions/setup-node@v4
++        with:
++          node-version: "20"
++          cache: "npm"
++
++      - name: Add upstream remote
++        run: |
++          git remote add upstream https://github.com/Dart-Code/Dart-Code.git || true
++          git remote -v
++
++      - name: Fetch upstream
++        run: |
++          BRANCH="${{ github.event.inputs.upstream_branch || 'master' }}"
++          git fetch upstream "$BRANCH"
++          echo "UPSTREAM_BRANCH=$BRANCH" >> "$GITHUB_ENV"
++
++      - name: Check for merge conflicts
++        id: merge_check
++        run: |
++          git config user.email "ci@dartnative.dev"
++          git config user.name "DartNative CI"
++          if ! git merge --no-commit --no-ff "upstream/$UPSTREAM_BRANCH" 2>&1; then
++            echo "CONFLICTS=true" >> "$GITHUB_OUTPUT"
++            git merge --abort
++          else
++            echo "CONFLICTS=false" >> "$GITHUB_OUTPUT"
++            git merge --abort
++          fi
++
++      - name: Report conflicts
++        if: steps.merge_check.outputs.CONFLICTS == 'true'
++        run: |
++          echo "::error ::Merge conflicts detected with upstream/$UPSTREAM_BRANCH."
++          echo "Run scripts/ci/test-upstream-sync.sh locally to review conflicts."
++          exit 1
++
++      - name: Apply DartNative patches
++        run: ./scripts/patch-all.sh
++
++      - name: Install dependencies
++        run: npm ci
++
++      - name: Build extension
++        run: npm run build
++
++      - name: Lint
++        run: npm run lint
++
++      - name: Summary
++        run: |
++          echo "### ✅ Upstream Sync Check Passed" >> "$GITHUB_STEP_SUMMARY"
++          echo "" >> "$GITHUB_STEP_SUMMARY"
++          echo "DartNative patches apply cleanly on top of \`upstream/$UPSTREAM_BRANCH\`." >> "$GITHUB_STEP_SUMMARY"
++          echo "Build and lint both passed." >> "$GITHUB_STEP_SUMMARY"
++
++  dartnative-build:
++    name: Build & Lint DartNative extension
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++
++    steps:
++      - name: Checkout
++        uses: actions/checkout@v4
++
++      - name: Set up Node.js
++        uses: actions/setup-node@v4
++        with:
++          node-version: "20"
++          cache: "npm"
++
++      - name: Install dependencies
++        run: npm ci
++
++      - name: Apply DartNative patches
++        run: ./scripts/patch-all.sh
++
++      - name: Build
++        run: npm run build
++
++      - name: Lint
++        run: npm run lint
++
++      - name: Verify unpatch restores pristine baseline
++        run: |
++          ./scripts/unpatch-all.sh
++          git diff --exit-code || (echo "::error ::unpatch-all did not cleanly restore upstream baseline" && exit 1)
 diff --git a/.gitignore b/.gitignore
 index 666a2f43..2ce408b3 100644
 --- a/.gitignore
@@ -9,6 +240,492 @@ index 666a2f43..2ce408b3 100644
 +package.json.upstream
 +.agents/
 +skills-lock.json
+diff --git a/COMMANDS_AND_SETTINGS.md b/COMMANDS_AND_SETTINGS.md
+new file mode 100644
+index 00000000..2c65e3a3
+--- /dev/null
++++ b/COMMANDS_AND_SETTINGS.md
+@@ -0,0 +1,359 @@
++# Dart-Code Commands & Settings Reference
++
++This document catalogs all **VS Code Commands** and **Configuration Settings** contributed by and used within the Dart-Code extension. It serves as a reference for enabling, disabling, and renaming commands and settings.
++
++---
++
++## Table of Contents
++
++1. [Guide: How to Modify Commands and Settings](#guide-how-to-modify-commands-and-settings)
++   - [Renaming a Command](#renaming-a-command)
++   - [Disabling / Enabling a Command in the Command Palette](#disabling--enabling-a-command-in-the-command-palette)
++   - [Renaming / Modifying a Setting](#renaming--modifying-a-setting)
++2. [Commands Reference](#commands-reference)
++   - [Dart Commands (57)](#dart-commands)
++   - [Flutter Commands (42)](#flutter-commands)
++   - [Pub Commands (5)](#pub-commands)
++   - [Debug Commands (5)](#debug-commands)
++   - [Internal / Code-Only Commands (21)](#internal--code-only-commands)
++3. [Settings Reference](#settings-reference)
++   - [Analyzer Settings (11)](#analyzer-settings)
++   - [DevTools Settings (10)](#devtools-settings)
++   - [Editor Settings (25)](#editor-settings)
++   - [Flutter Settings (25)](#flutter-settings)
++   - [Logging Settings (11)](#logging-settings)
++   - [Pub Settings (6)](#pub-settings)
++   - [Run and Debug Settings (19)](#run-and-debug-settings)
++   - [SDK Settings (11)](#sdk-settings)
++   - [Testing Settings (5)](#testing-settings)
++   - [Experimental Settings (10)](#experimental-settings)
++   - [Other Settings (3)](#other-settings)
++   - [Legacy Settings (3)](#legacy-settings)
++
++---
++
++## Guide: How to Modify Commands and Settings
++
++### Renaming a Command
++- **Title / Display Label**: Modify the `"title"` or `"category"` in `package.json` under `contributes.commands`.
++- **Command Identifier**: If modifying the command ID string (e.g. `dart.xxx` $\to$ `dartx.xxx`), you must update:
++  1. `package.json` (`contributes.commands`, `contributes.menus`, `contributes.keybindings`)
++  2. The TypeScript registration file under `src/extension/commands/` (e.g. `vs.commands.registerCommand("dart.xxx", ...)`)
++  3. Any internal calls referencing `vs.commands.executeCommand("dart.xxx", ...)`
++
++### Disabling / Enabling a Command in the Command Palette
++- **To Disable / Hide from Palette**: In `package.json` under `contributes.menus.commandPalette`, add or set:
++  ```json
++  {
++    "command": "dart.commandName",
++    "when": "false"
++  }
++  ```
++- **To Enable in Palette**: Remove `"when": "false"` or change `"when"` to an activation condition like `"dart-code:anyProjectLoaded"` or `"dart-code:anyFlutterProjectLoaded"`.
++
++### Renaming / Modifying a Setting
++- **Manifest Definition**: In `package.json` under `contributes.configuration`, update the key name, default value, description, or enum options.
++- **Code Access**: In `src/extension/config.ts`, update the corresponding getter property and any code references.
++
++---
++
++## Commands Reference
++
++### Dart Commands
++
++| Command ID | Title | Palette Status / When Condition | Registered In |
++| :--- | :--- | :--- | :--- |
++| `dart.toggleShowTodos` | Toggle Show TODOs | Visible (Default) | `src/extension/commands/analyzer.ts` |
++| `dart.createProject` | Create New Project | Conditional (`undefined`) | `src/extension/commands/dart.ts`, `src/extension/sdk/utils.ts` |
++| `dart.addSdkToPath` | Add Dart SDK to PATH | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/add_sdk_to_path.ts` |
++| `dart.writeRecommendedSettings` | Use Recommended Settings | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/edit.ts` |
++| `dart.addDependency` | Add Dependency | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/add_dependency.ts` |
++| `dart.addDevDependency` | Add Dev Dependency | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/add_dependency.ts` |
++| `_dart.removeDependency` | Remove Dependency | **Hidden** (`when: false`) | `src/extension/commands/add_dependency.ts` |
++| `_dart.removeDependencyFromTreeNode` | Remove Dependency | **Hidden** (`when: false`) | `src/extension/views/packages_view.ts` |
++| `_dart.openDependencyPageFromTreeNode` | Open on pub.dev | Visible (Default) | `src/extension/views/packages_view.ts` |
++| `dart.toggleLineComment` | Toggle Line Comment Kind | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/edit.ts` |
++| `dart.toggleDartdocComment` | Toggle Dartdoc Comment | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/edit.ts` |
++| `dart.task.dartdoc` | Generate Documentation | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/dart/dart_task_provider.ts` |
++| `dart.goToSuper` | Go to Super Class/Member | Conditional (`dart-code:anyProjectLoaded && editorLangId == dart`) | `src/extension/lsp/go_to.ts` |
++| `dart.goToImports` | Go to Imports | Conditional (`dart-code:anyProjectLoaded && editorLangId == dart && dart-code:goToImportsSupported`) | `src/extension/lsp/go_to.ts` |
++| `dart.goToAugmented` | Go to Augmented Class/Member/Function | Conditional (`dart-code:anyProjectLoaded && editorLangId == dart && dart-code:lsp.request.dart.textDocument.augmented`) | `src/extension/lsp/go_to.ts` |
++| `dart.goToAugmentation` | Go to Class/Member/Function Augmentation | Conditional (`dart-code:anyProjectLoaded && editorLangId == dart && dart-code:lsp.request.dart.textDocument.augmentation`) | `src/extension/lsp/go_to.ts` |
++| `dart.rerunLastDebugSession` | Rerun Last Debug Session | Conditional (`dart-code:anyProjectLoaded && dart-code:hasLastDebugConfig`) | `src/extension/commands/debug.ts` |
++| `dart.rerunLastTestDebugSession` | Rerun Last Test Session | Conditional (`dart-code:anyProjectLoaded && dart-code:hasLastTestDebugConfig`) | `src/extension/commands/debug.ts` |
++| `dart.restartAnalysisServer` | Restart Analysis Server | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/analyzer.ts` |
++| `dart.forceReanalyze` | Reanalyze Project | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/analyzer.ts` |
++| `dart.printSelectionToTerminal` | Linkify Selected Editor Text into Terminal | Conditional (`dart-code:anyProjectLoaded && editorHasSelection`) | `src/extension/commands/edit.ts` |
++| `dart.goToTestOrImplementationFile` | Go to Test/Implementation File | Conditional (`dart-code:anyProjectLoaded && dart-code:canGoToTestOrImplementationFile`) | `src/extension/commands/test.ts` |
++| `dart.findTestOrImplementationFile` | Find Test/Implementation File | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/test.ts` |
++| `dart.goToTests` | Go to Tests | **Hidden** (`when: false`) | `src/extension/commands/test.ts` |
++| `dart.startDebugging` | Start Debugging | **Hidden** (`when: false`) | `src/extension/commands/debug.ts` |
++| `dart.startWithoutDebugging` | Run Without Debugging | **Hidden** (`when: false`) | `src/extension/commands/debug.ts` |
++| `dart.createLaunchConfiguration` | Create Launch Configuration | **Hidden** (`when: false`) | `src/extension/commands/debug.ts` |
++| `dart.sortMembers` | Sort Members | Conditional (`dart-code:anyProjectLoaded && editorLangId == dart`) | `src/extension/commands/edit.ts` |
++| `dart.edit.fixAllInWorkspace` | Apply Fix All in Workspace | Conditional (`dart-code:anyProjectLoaded && dart-code:lsp.command.dart.edit.fixAllInWorkspace`) | _Not explicitly registered in src/ (or via LSP/VSCode)_ |
++| `dart.edit.fixAllInWorkspace.preview` | Preview Fix All in Workspace | Conditional (`dart-code:anyProjectLoaded && dart-code:lsp.command.dart.edit.fixAllInWorkspace.preview`) | _Not explicitly registered in src/ (or via LSP/VSCode)_ |
++| `dart.generateDiagnosticReport` | Collect Diagnostic Information | Conditional (`undefined`) | `src/extension/diagnostic_report.ts` |
++| `dart.startLogging` | Capture Logs | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/logging.ts` |
++| `dart.startLoggingAnalysisServer` | Capture Analysis Server Logs | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/logging.ts` |
++| `dart.startLoggingAnalysisServerTimings` | Capture Analysis Server Timings | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/logging.ts` |
++| `dart.startLoggingDebugging` | Capture Debugging Logs | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/logging.ts` |
++| `dart.startLoggingExtensionOnly` | Capture Extension Logs | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/logging.ts` |
++| `dart.openExtensionLog` | Open Extension Log | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/logging.ts` |
++| `dart.stopLogging` | Stop Capturing Logs | Conditional (`dart-code:anyProjectLoaded && dart-code:isCapturingLogs`) | `src/extension/commands/logging.ts` |
++| `dart.openObservatory` | Open Observatory (Deprecated) | **Hidden** (`when: false`) | `src/extension/commands/debug.ts` |
++| `dart.openAnalyzerDiagnostics` | Open Analyzer Diagnostics / Insights | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/analyzer.ts` |
++| `dart.changeSdk` | Change SDK | Conditional (`dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded`) | `src/extension/commands/sdk.ts` |
++| `_dart.hotReload.touchBar` | Hot Reload | **Hidden** (`when: false`) | `src/extension/commands/debug.ts` |
++| `_dart.hotReload.withSave` | Save and Hot Reload | **Hidden** (`when: false`) | `src/extension/commands/debug.ts` |
++| `dart.hotReload` | Hot Reload | Conditional (`inDebugMode && debugType == dart && dart-code:service.reloadSources \|\| inDebugMode && debugType == dart && dart-code:isInDartDebugSession`) | `src/extension/commands/debug.ts` |
++| `dart.openDevTools` | Open DevTools | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/debug.ts` |
++| `dart.openDevTools.external` | Open DevTools in Browser | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/debug.ts` |
++| `dart.copyVmServiceUri` | Copy VM Service URI to Clipboard | Conditional (`dart-code:anyProjectLoaded && inDebugMode && debugType == dart`) | `src/extension/commands/debug.ts` |
++| `dart.copyDtdUri` | Copy DTD URI to Clipboard | Conditional (`dart-code:dtdAvailable`) | `src/extension/dart/tooling_daemon.ts` |
++| `dart.openDevToolsMemory` | Open DevTools Memory Page | Conditional (`dart-code:anyProjectLoaded && inDebugMode && debugType == dart && dart-code:devToolsSupportsMemory`) | _Not explicitly registered in src/ (or via LSP/VSCode)_ |
++| `dart.openDevToolsCpuProfiler` | Open DevTools CPU Profiler Page | **Hidden** (`when: false`) | _Not explicitly registered in src/ (or via LSP/VSCode)_ |
++| `dart.openDevToolsNetwork` | Open DevTools Network Page | Conditional (`dart-code:anyProjectLoaded && inDebugMode && debugType == dart && dart-code:devToolsSupportsNetwork`) | _Not explicitly registered in src/ (or via LSP/VSCode)_ |
++| `dart.openDevToolsLogging` | Open DevTools Logging Page | Conditional (`dart-code:anyProjectLoaded && inDebugMode && debugType == dart && dart-code:devToolsSupportsLogging`) | _Not explicitly registered in src/ (or via LSP/VSCode)_ |
++| `_dart.openDevTools.touchBar` | DevTools | **Hidden** (`when: false`) | `src/extension/commands/debug.ts` |
++| `_dart.showDebuggerNumbersAsHex` | Format integers as Hex | **Hidden** (`when: false`) | `src/extension/providers/debug_adapter_hex_view_factory.ts` |
++| `_dart.showDebuggerNumbersAsDecimal` | Format integers as Decimal | **Hidden** (`when: false`) | `src/extension/providers/debug_adapter_hex_view_factory.ts` |
++| `_dart.settings.openDevToolsLocationSetting` | Change where DevTools appears | **Hidden** (`when: false`) | `src/extension/commands/settings.ts` |
++| `_dart.settings.openDartTestAdditionalArgs` | Edit additional 'dart test' arguments | **Hidden** (`when: false`) | `src/extension/commands/settings.ts` |
++
++### Flutter Commands
++
++| Command ID | Title | Palette Status / When Condition | Registered In |
++| :--- | :--- | :--- | :--- |
++
++### Pub Commands
++
++| Command ID | Title | Palette Status / When Condition | Registered In |
++| :--- | :--- | :--- | :--- |
++| `pub.get` | Get Packages | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
++| `pub.get.all` | Get Packages for All Projects | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
++| `pub.upgrade` | Upgrade Packages | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
++| `pub.upgrade.majorVersions` | Upgrade Packages (--major-versions) | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
++| `pub.outdated` | List Outdated Packages | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
++
++### Debug Commands
++
++| Command ID | Title | Palette Status / When Condition | Registered In |
++| :--- | :--- | :--- | :--- |
++| `dart.attach` | Attach to Dart Process | Conditional (`dart-code:anyProjectLoaded && !inDebugMode`) | `src/extension/commands/debug.ts` |
++
++### Internal / Code-Only Commands
++
++These commands are registered directly in TypeScript code but are not declared in `package.json` commands list (often used for internal callbacks, code lenses, tree views, or refactorings):
++
++| Command ID | Code Location |
++| :--- | :--- |
++| `_dart.applySnippetTextEdit` | `src/extension/analysis/analyzer_snippet_text_edits.ts` |
++| `_dart.openDartPadSample` | `src/extension/code_lens/flutter_dartpad_samples.ts` |
++| `_dart.addDependency` | `src/extension/commands/add_dependency.ts` |
++| `_dart.create` | `src/extension/commands/dart.ts` |
++| `dart.promptForVmService` | `src/extension/commands/debug.ts` |
++| `_dart.toggleDebugOptions` | `src/extension/commands/debug.ts` |
++| `_dart.jumpToLineColInUri` | `src/extension/commands/edit.ts` |
++| `_dart.showCode` | `src/extension/commands/edit.ts` |
++| `_dart.flutter.createSampleProject` | `src/extension/commands/flutter.ts`, `src/extension/sdk/utils.ts` |
++| `_flutter.create` | `src/extension/commands/flutter.ts` |
++| `_flutter.clean` | `src/extension/commands/flutter.ts` |
++| `dart.getPackages` | `src/extension/commands/packages.ts` |
++| `dart.getPackages.all` | `src/extension/commands/packages.ts` |
++| `dart.listOutdatedPackages` | `src/extension/commands/packages.ts` |
++| `dart.upgradePackages` | `src/extension/commands/packages.ts` |
++| `dart.upgradePackages.majorVersions` | `src/extension/commands/packages.ts` |
++| `_dart.startDebuggingTestFromOutline` | `src/extension/commands/test.ts` |
++| `_dart.startWithoutDebuggingTestFromOutline` | `src/extension/commands/test.ts` |
++| `_dart.startDebuggingTestsFromVsTestController` | `src/extension/commands/test.ts` |
++| `_dart.startWithoutDebuggingTestsFromVsTestController` | `src/extension/commands/test.ts` |
++| `_dart.runAllTestsWithoutDebugging` | `src/extension/commands/test.ts` |
++| `dart.refactor.extractWidget` | `src/extension/commands/widget_refactors.ts` |
++| `dart.refactor.wrapWithWidget` | `src/extension/commands/widget_refactors.ts` |
++| `_dart.reloadExtension` | `src/extension/extension.ts` |
++| `dart.package.openFile` | `src/extension/extension.ts` |
++| `dart.goToLocation` | `src/extension/lsp/go_to.ts` |
++
++---
++
++## Settings Reference
++
++### Analyzer Settings (11)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.analysisExcludedFolders` | `array` | `[]` | An array of paths to be excluded from Dart analysis. This option should usually be set at the Workspace level. Excluded folders will also be ignored when detecting project types. |
++| `dartx.analyzerAdditionalArgs` | `array` | `[]` | Additional arguments to pass to the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
++| `dartx.analyzerVmAdditionalArgs` | `array` | `[]` | Additional arguments to pass to the VM running the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
++| `dartx.analyzerDiagnosticsPort` | `null \| number` | `null` | The port number to be used for the Dart analyzer diagnostic server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
++| `dartx.analyzerPath` | `null \| string` | `null` | The path to a custom Dart Analysis Server. This setting is intended for use by Dart Analysis Server developers. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
++| `dartx.analyzerSshHost` | `null \| string` | `null` | An SSH host to run the Analysis Server. This can be useful when modifying code on a remote machine using SSHFS. |
++| `dartx.analyzerVmServicePort` | `null \| number` | `null` | The port number to be used for the Dart Analysis Server VM service. This setting is intended for use by Dart Analysis Server developers. |
++| `dartx.includeDependenciesInWorkspaceSymbols` | `boolean` | `true` | Whether to include symbols from the SDK and package dependencies in the "Go to Symbol in Workspace" (`cmd/ctrl`+`T`) list. This can only be disabled when using Dart 3.0 or later. |
++| `dartx.notifyAnalyzerErrors` | `boolean` | `true` | Whether to show a notification the first few times an Analysis Server exception occurs. |
++| `dartx.showTodos` | `boolean \| array` | `true` | Whether to show TODOs in the Problems list. Can be a boolean to enable all TODO comments (TODO, FIXME, HACK, UNDONE) or an array of which types to enable. Older Dart SDKs may not support some TODO kinds. |
++| `dartx.showExtensionRecommendations` | `boolean` | `true` | Whether to show recommendations for other VS Code extensions based on the packages you're using. |
++
++### DevTools Settings (8)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.devToolsBrowser` | `enum` | `"chrome"` | Whether to launch external DevTools windows using Chrome or the system default browser. This setting is ignored for remote workspaces (including Docker, SSH, WSL). |
++| `dartx.devToolsPort` | `null \| number` | `null` | The port number to be used for the Dart DevTools (requires restart). |
++| `dartx.devToolsReuseWindows` | `boolean` | `true` | Whether to try to reuse existing DevTools windows instead of launching new ones. Only works for instances of DevTools launched by the DevTools server on the local machine. |
++| `dartx.devToolsTheme` | `enum` | `"dark"` | The theme to use for Dart DevTools. |
++| `dartx.devToolsLocation` | `object` | `{"default":"beside","inspec...` | Where to open [Dart DevTools](https://dart.dev/tools/dart-devtools) pages. |
++| `dartx.openDevTools` | `enum` | `"never"` | Whether to automatically open DevTools at the start of a debug session. |
++| `dartx.closeDevTools` | `enum` | `"never"` | Whether to automatically close embedded DevTools tabs when a debug session ends. |
++| `dartx.customDevTools` | `object` | `—` | Custom settings for launching DevTools. This setting is intended for use by Dart DevTools developers. |
++
++### Editor Settings (23)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.autoImportCompletions` | `boolean` | `true` | Whether to include symbols that have not been imported in the code completion list and automatically insert the required import when selecting them (requires restart). |
++| `dartx.automaticCommentSlashes` | `enum` | `"tripleSlash"` | Determines when to insert comment slashes when pressing `<enter>` in the editor (requires restart).  When using `tripleSlash`, double-slashes will still be included when breaking existing double-slash comments across additional lines. |
++| `dartx.closingLabels` | `boolean` | `true` | Whether to show annotations against constructor, method invocations and lists that span multiple lines. |
++| `dartx.closingLabelsPrefix` | `string` | `" // "` | The prefix to use in closing labels. |
++| `dartx.closingLabelsTextStyle` | `string` | `"normal"` | The text style to use in closing labels. Using _Italic_ requires a font that supports italic text. |
++| `dartx.completeFunctionCalls` | `boolean` | `true` | Whether to insert parentheses and placeholders for positional and required arguments during code completions when using LSP. This feature is automatically disabled if commit characters are enabled. |
++| `dartx.documentation` | `null \| string` | `—` | What level of documentation to show in Hovers and Code Completion details. When `null`, defaults to 'full' when running locally and 'none' in remote workspaces. This setting is only supported for Dart SDKs after v2.18. |
++| `dartx.dtdEditorActiveLocationDelay` | `integer` | `200` | How long (in ms) to delay sending editor location change events over the Dart Tooling Daemon. Increasing this results in less events which may improve performance, at the expensive of tools that use these events not updating as quickly after your location/editor changes (requires restart). |
++| `dartx.enableServerSnippets` | `boolean` | `true` | Whether to use code snippets from the Dart Analysis Server instead of those included in the extension. Server snippets are context and language-version aware and should be preferred. |
++| `dartx.hotReloadPatterns` | `array` | `[]` | An array of glob patterns that should trigger Hot Reload when saved. The pattern is matched against the absolute path of the file. Use `**/assets/**` to trigger reloading for everything in the assets directory. Must always start with "**/" and use forward slashes (even on Windows) as backslashes are used for escaping. |
++| `dartx.enableCompletionCommitCharacters` | `boolean` | `false` | Whether to automatically commit the selected completion item when pressing certain keys such as . , ( and \[. This setting does not currently apply to LSP, see `#dartx.previewCommitCharacters#`. |
++| `dartx.enableSdkFormatter` | `boolean` | `true` | Whether to enable the [dart_style](https://pub.dev/packages/dart_style) formatter for Dart code. |
++| `dartx.enableSnippets` | `boolean` | `true` | Whether to include Dart and DartNative snippets in code completion. |
++| `dartx.inlayHints` | `boolean \| object` | `true` | Whether to show Inlay Hints. When set to `true`, enables all inlay hints with default settings. When set to `false`, disables all inlay hints. Can also be an object to configure individual hint types. Requires Dart 3.10. |
++| `dartx.insertArgumentPlaceholders` | `boolean` | `true` | Whether to insert argument placeholders during code completions. This feature is automatically disabled when `enableCompletionCommitCharacters` is enabled. |
++| `dartx.lspSnippetTextEdits` | `boolean` | `true` | Whether to enable [Snippet support in LSP TextEdits](https://github.com/rust-analyzer/rust-analyzer/blob/979e788957ced1957ee9ac1da70fb97abf9fe2b1/docs/dev/lsp-extensions.md#snippet-textedit). |
++| `dartx.renameFilesWithClasses` | `enum` | `"never"` | Whether to rename files when renaming classes with matching names (for example renaming 'class Person' inside 'person.dart'). If set to 'prompt', will ask each time before renaming. If set to 'always', the file will automatically be renamed. This setting requires using LSP and a Dart SDK of at least v2.15. |
++| `dartx.showDartPadSampleCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for opening online DartPad samples. |
++| `dartx.showMainCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for quick running / debugging scripts with main functions. |
++| `dartx.showTestCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for quick running / debugging tests. |
++| `dartx.updateImportsOnRename` | `boolean` | `true` | Whether to automatically update imports when moving or renaming files. Currently only supports single file moves / renames. |
++| `dartx.warnWhenEditingFilesOutsideWorkspace` | `boolean` | `true` | Whether to show a warning when modifying files outside of the workspace. |
++| `dartx.warnWhenEditingFilesInPubCache` | `boolean` | `true` | Whether to show a warning when modifying files in the [system package cache](https://dart.dev/tools/pub/glossary#system-cache) directory. |
++
++### DartNative Settings (17)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.offline` | `boolean` | `false` | Whether to use the --offline switch for commands like 'pub get' and 'DartNative: Create New Project'. |
++| `dartx.hotReloadOnSave` | `enum` | `"never"` | Whether to automatically send a Hot Reload request to Dart apps during a debug session when saving files. DartNative apps are controlled by the dartNativeHotReloadOnSave setting. |
++| `dartx.enableWidgetRefactors` | `boolean` | `true` | Whether to enable built-in DartX widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin. |
++| `dartx.formatAfterSnippet` | `boolean` | `true` | Whether to automatically format the document after inserting widget snippets (such as `stless` and `stful`). |
++| `dartx.formatAfterRefactoring` | `boolean` | `true` | Whether to automatically format the document after applying refactorings (such as Extract Widget, Wrap with Widget, and state conversions). |
++| `dartx.moveNonFinalFieldsToState` | `boolean` | `true` | When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers. |
++| `dartx.dartNativeAdditionalArgs` | `array` | `[]` | Additional arguments to pass to `dartnative` commands, including the daemon. Arguments are passed directly to `dn`. |
++| `dartx.dartNativeCreatePlatforms` | `array` | `["android","ios"]` | The platforms to enable for new projects created using the 'DartNative: Create New Project' command. Only 'android' and 'ios' are supported for DartNative. |
++| `dartx.dartNativeCreatePromptForPlatforms` | `boolean` | `true` | Whether to prompt for platforms when running 'DartNative: Create New Project'. |
++| `dartx.dartNativeGutterIcons` | `boolean` | `true` | Whether to show DartNative icons and colors in the editor gutter. |
++| `dartx.dartNativeHotReloadOnSave` | `enum` | `"manual"` | Whether to automatically send a Hot Reload request to DartNative apps during a debug session when saving files. Dart apps are controlled by the hotReloadOnSave setting. |
++| `dartx.dartNativeRememberSelectedDevice` | `boolean` | `true` | Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dartx.dartNativeSelectDeviceWhenConnected#` setting). |
++| `dartx.dartNativeRunAdditionalArgs` | `array` | `[]` | Additional arguments to pass when running `dartnative` applications in debug or run mode. Arguments are passed directly to `dn run`. |
++| `dartx.dartNativeScreenshotPath` | `null \| string` | `null` | The path to a directory to save DartNative screenshots. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
++| `dartx.dartNativeSelectDeviceWhenConnected` | `boolean` | `true` | Whether to set newly connected devices as the current device in DartNative projects. |
++| `dartx.dartNativeShowEmulators` | `enum` | `"local"` | When to show DartNative emulators. These are usually hidden for remote workspaces because it is usually not possible to see or interact with emulators in a remote session. If you are using remoting/containers in a way that you can interact with launched emulator processes, you may wish to set this to 'always'. |
++| `dartx.dartNativeTestAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dartnative test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
++
++### Logging Settings (10)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.analyzerInstrumentationLogFile` | `null \| string` | `null` | The path to a log file for very detailed logging in the Dart Analysis Server that may be useful when trying to diagnose Analysis Server issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++| `dartx.analyzerLogFile` | `null \| string` | `null` | The path to a log file for communication between Dart Code and the Analysis Server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++| `dartx.toolingDaemonLogFile` | `null \| string` | `null` | The path to a log file for the `dart tooling-daemon` service, which coordinates between various Dart and DartNative tools and extensions. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++| `dartx.dapLogFile` | `null \| string` | `null` | The path to a log file for communication with the DAP debug adapters. This is useful when trying to diagnose issues with debugging such as missed breakpoints. Use `${name}` in the log file name to insert the Debug Session name to prevent concurrent debug sessions overwriting each others logs. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `${kind}` to insert a description of the kind of debug session ('dart', 'dart_test', 'dartnative' etc.). Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++| `dartx.devToolsLogFile` | `null \| string` | `null` | The path to a low-traffic log file for the Dart DevTools service. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++| `dartx.extensionLogFile` | `null \| string` | `null` | The path to a low-traffic log file for basic extension and editor issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++| `dartx.mcpServerLogFile` | `null \| string` | `null` | The path to a log file for the Dart SDK's MCP server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++| `dartx.maxLogLineLength` | `number` | `2000` | The maximum length of a line in the log file. Lines longer than this will be truncated and suffixed with an ellipsis. |
++| `dartx.maxCompletionItems` | `null \| number` | `—` | The maximum number of completion items to return from a code completion request. Updated results will be fetched as additional characters are typed. Lower numbers may improved performance. Defaults to a lower value in remote workspaces. Only affects LSP for > Dart SDK 2.17. |
++| `dartx.dartNativeDaemonLogFile` | `null \| string` | `null` | The path to a log file for the `dartnative daemon` service, which provides information about connected devices accessible from the status bar. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
++
++### Pub Settings (6)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.enablePub` | `boolean` | `true` | Whether to enable functionality for using Pub. Turning this setting off will prevent the extension from ever running pub and hide all commands relating to this. Use this if you are using an alternative package manager. |
++| `dartx.promptToGetPackages` | `boolean` | `true` | Whether to prompt to get/upgrade packages when opening a project with missing/out of date packages. |
++| `dartx.pubAdditionalArgs` | `array` | `[]` | Additional args to pass to all `pub` commands (such as `dn pub get`, `flutter pub get`, or `dart pub get`). |
++| `dartx.runPubGetOnPubspecChanges` | `enum` | `"always"` | Whether to run `pub get` whenever `pubspec.yaml` is saved. |
++| `dartx.runPubGetOnNestedProjects` | `enum` | `"none"` | Whether to automatically run `pub get` on nested projects above or below the one where the pubspec was changed. |
++| `dartx.runPubConcurrently` | `boolean` | `true` | Whether to run Pub operations across multiple folders concurrently. |
++
++### Run and Debug Settings (18)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.buildRunnerAdditionalArgs` | `array` | `[]` | Additional args to pass to the `build_runner` when building/watching/serving. |
++| `dartx.cliConsole` | `enum` | `"debugConsole"` | Whether to run Dart CLI apps in the Debug Console or a terminal. The Debug Console has more functionality because the process is controlled by the debug adapter, but is unable to accept input from the user via stdin. |
++| `dartx.debugExtensionBackendProtocol` | `enum` | `"ws"` | The protocol to use for the Dart Debug Extension backend service and injected client. Using WebSockets can improve performance but may fail when connecting through some proxy servers. |
++| `dartx.debugSdkLibraries` | `boolean` | `false` | Whether to mark Dart SDK libraries (`dart:*`) as debuggable, enabling stepping into them while debugging. |
++| `dartx.debugExternalPackageLibraries` | `boolean` | `false` | Whether to mark external pub package libraries (including `package:dartnative`) as debuggable, enabling stepping into them while debugging. |
++| `dartx.evaluateGettersInDebugViews` | `boolean` | `true` | Whether to evaluate getters in order to display them in debug views (such as the Variables, Watch and Hovers views). |
++| `dartx.showGettersInDebugViews` | `boolean` | `true` | Whether to show getters in order to display them in debug views (such as the Variables, Watch and Hovers views). If `evaluateGettersInDebugViews` is `true` getters will be eagerly evaluated, otherwise they will require clicking to evaluate. |
++| `dartx.evaluateToStringInDebugViews` | `boolean` | `true` | Whether to call toString() on objects when rendering them in debug views (such as the Variables, Watch and Hovers views). Only applies to views of 100 or fewer values for performance reasons. |
++| `dartx.hotReloadProgress` | `enum` | `"notification"` | Determines how to display Hot Restart and Hot Reload progress. |
++| `dartx.promptToRunIfErrors` | `boolean` | `true` | Whether to prompt before running if there are errors in your project. Test scripts will be excluded from the check unless they're the script being run. |
++| `dartx.showDartDeveloperLogs` | `boolean` | `true` | Whether to show logs from the `dart:developer` `log()` function in the debug console. |
++| `dartx.showDebuggerNumbersAsHex` | `boolean` | `false` | Whether to show integers formatted as Hex in Variables, Watch, Debug Consoles. |
++| `dartx.showDevToolsDebugToolBarButtons` | `boolean` | `true` | Whether to show DevTools buttons in the floating Debug toolbar. |
++| `dartx.suppressTestTimeouts` | `enum` | `"debug"` | Whether to suppress test timeouts when running/debugging tests. To work properly this requires package:test version 1.20.1 or newer. For older versions, the default timeout will be increased to 1d but this will not affect tests that have explicit (non-factor) timeouts set with @timeout. |
++| `dartx.cliAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart` command when running CLI scripts. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
++| `dartx.testAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
++| `dartx.vmAdditionalArgs` | `array` | `[]` | Arguments to be passed to the Dart VM when running Dart CLI scripts/tests.  These arguments appear after "dart" but before subcommands like "test":  `dart (vmAdditionalArgs) test (toolArgs) test/my_test.dart (args)` |
++| `dartx.customDartDapPath` | `null \| string` | `null` | The path to a custom Dart Debug Adapter. This setting is intended for use by Dart Debug Adapter developers. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
++
++### SDK Settings (7)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.checkForSdkUpdates` | `boolean` | `true` | Whether to check you are using the latest version of the Dart SDK at startup. |
++| `dartx.sdkSwitchingTarget` | `enum` | `"workspace"` | Where to save SDK selections when using fast SDK switching from the language status entry. |
++| `dartx.addSdkToTerminalPath` | `boolean` | `true` | Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartx..dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart). |
++| `dartx.mcpServer` | `boolean` | `true` | Whether to register the Dart SDK's MCP server with VS Code. This only applies to Dart SDKs >= v3.9.0 which added the server. |
++| `dartx.mcpServerTools` | `object` | `{"analyze_files":false,"dar...` | A map of MCP tool names to booleans to enable/disable specific tools from the Dart MCP server. Tools set to `false` will be excluded (if supported). By default, tools that overlap with built-in VS Code functionality will be excluded. |
++| `dartx.dartNativeSdkPath` | `null \| string` | `null` | The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
++| `dartx.dartNativeSdkPaths` | `array` | `[]` | An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and runtime are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
++
++### Testing Settings (5)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.allowTestsOutsideTestFolder` | `boolean` | `false` | Whether to consider files ending `_test.dart` that are outside of the test directory as tests. This should be enabled if you put tests inside the `lib` directory of your DartNative app so they will be run with test commands. |
++| `dartx.coverageExcludePatterns` | `array` | `[]` | An array of glob patterns to exclude from code coverage results. Paths matching any of these patterns will still be collected by the Dart VM but not be included in coverage reported to VS Code. |
++| `dartx.openTestView` | `array` | `["testRunStart"]` | When to automatically switch focus to the test list (array to support multiple values). |
++| `dartx.showSkippedTests` | `boolean` | `true` | Whether to show skipped tests in the test tree. |
++| `dartx.testInvocationMode` | `enum` | `"name"` | How to identify tests when running/debugging. `name` is compatible with older versions of `package:test` but cannot handle some complex/dynamic test names. `line` will prefer to run tests by their line numbers (when available) and fall back to `name` only if the line number is unavailable. |
++
++### Other Settings (3)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.projectSearchDepth` | `number` | `5` | How many levels (including the workspace roots) down the workspace to search for Dart/DartNative projects. Increasing this number may help detect DartNative projects that are deeply nested in your workspace but slow down all operations that search for projects, including extension activation (requires restart). |
++| `dartx.env` | `object` | `{}` | Additional environment variables to be added to all Dart/DartNative processes spawned by the DartX extension. |
++| `dartx.toolingDaemonAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart tooling-daemon` command that runs as a background service (requires restart). |
++
++### Experimental Settings (8)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.normalizeFileCasing` | `boolean` | `false` | Whether to normalize file casings before sending them to the LSP server. This may fix issues with file_names lints not disappearing after renaming a file if the VS Code API continues to use the original casing. |
++| `dartx.daemonPort` | `null \| number` | `null` | EXPERIMENTAL: The port where the daemon can be accessed if daemon is run remotely. This setting is intended for use by developers. |
++| `dartx.previewCommitCharacters` | `boolean` | `false` | EXPERIMENTAL: Whether to enable commit characters for the LSP server. In a future release, the dart.enableCompletionCommitCharacters setting will also apply to LSP. |
++| `dartx.previewHotReloadOnSaveWatcher` | `boolean` | `false` | Whether to perform hot reload on save based on a filesystem watcher for Dart files rather than using VS Code's `onDidSave` event. This allows reloads to trigger when external tools modify Dart source files. |
++| `dartx.experimentalRefactors` | `boolean` | `false` | Whether to enable experimental (possibly unfinished or unstable) refactors on the lightbulb menu. This setting is intended for use by Dart Analysis Server developers or users that want to try out and provide feedback on in-progress refactors. |
++| `dartx.interactiveForms` | `boolean` | `true` | Whether to enable the Interactive Forms feature used for accepting user input during refactors. |
++| `dartx.dynamicTestTracking` | `boolean` | `true` | Whether to use the new dynamic test tracking. This is a temporary setting that will be removed in an upcoming release. |
++| `dartx.experimentalDtdHandlers` | `boolean` | `false` | Whether to enable experimental (possibly unfinished or unstable) LSP handlers through DTD. This setting is passed to the analysis server in the connectToDtd request and therefore relies on DTD being supported and enabled for the analysis server (requires restart). |
++
++### Legacy Settings (2)
++
++| Setting Key | Type | Default | Description |
++| :--- | :--- | :--- | :--- |
++| `dartx.lineLength` | `integer` | `80` | **LEGACY SETTING: Use `formatter.page_width` in `analysis_options.yaml` instead.**  The maximum length of a line of code. This is used by the document formatter. If you change this value, you may wish to update `editor.rulers` (which draws vertical lines in the editor) in the `["dart"]` section of your settings to match. |
++| `dartx.onlyAnalyzeProjectsWithOpenFiles` | `boolean` | `false` | **Deprecated**: Whether to ignore workspace folders and perform analysis based on the open files. This setting can make performance significantly worse when moving around a project and is not recommended. |
++
+diff --git a/README.md b/README.md
+index 40dc4ad2..634cd6e3 100644
+--- a/README.md
++++ b/README.md
+@@ -1,16 +1,18 @@
+-[![Discord Chat](https://img.shields.io/badge/chat-discord-blue.svg)](https://discord.gg/xSTPEqm)
++<!-- [![Discord Chat](https://img.shields.io/badge/chat-discord-blue.svg)](https://discord.gg/xSTPEqm)
+ [![Follow on Twitter](https://img.shields.io/badge/twitter-dartcode-blue.svg)](https://twitter.com/DartCode)
+ [![Follow on Bluesky](https://img.shields.io/badge/bluesky-dartcode.org-blue.svg)](https://bsky.app/profile/dartcode.org)
+ [![Contribute to Dart Code](https://img.shields.io/badge/help-contribute-551A8B.svg)](https://github.com/Dart-Code/Dart-Code/blob/master/CONTRIBUTING.md)
+-[![Coverage](https://codecov.io/github/Dart-Code/Dart-Code/graph/badge.svg?token=EPDiJkMrZM)](https://codecov.io/github/Dart-Code/Dart-Code)
++[![Coverage](https://codecov.io/github/Dart-Code/Dart-Code/graph/badge.svg?token=EPDiJkMrZM)](https://codecov.io/github/Dart-Code/Dart-Code) -->
+ 
+ ## Introduction
+ 
+-Dart Code extends [VS Code](https://code.visualstudio.com/) with support for the
+-[Dart](https://dart.dev/) programming language, and provides tools for
+-effectively editing, refactoring, running, and reloading [Flutter](https://flutter.dev/)
+-mobile apps.
++<p align="start">
++  <img src="media/dartnative.png" alt="DartNative" width="128" />
++</p>
+ 
++DartNative extends [DartCode](https://dartcode.org/) extension and provides tools for
++effectively editing, refactoring, running, and reloading [DartNative](https://dartnative.com/)
++mobile apps.
+ 
+ ## Installation
+ 
+@@ -18,26 +20,25 @@ Dart Code can be [installed from the Visual Studio Code Marketplace](https://mar
+ 
+ If you have any issues using Dart Code, please file issues on GitHub at [https://github.com/Dart-Code/Dart-Code/issues/new/choose](https://github.com/Dart-Code/Dart-Code).
+ 
+-
+ ## Features
+ 
+-- Edit and Debug Flutter mobile apps (launch using `F5` or the `Debug` menu)
++- Edit and Debug DartNative mobile apps (launch using `F5` or the `Debug` menu)
+ - Edit and Debug Dart command line apps (launch using `F5` or the `Debug` menu)
+-- [Automatic hot reloads for Flutter](https://dartcode.org/docs/settings/#dartflutterhotreloadonsave)
+-- [Refactorings and Code fixes (lightbulb)](https://dartcode.org/docs/refactorings-and-code-fixes/)
+-- [Quickly switch between devices for Flutter](https://dartcode.org/docs/quickly-switching-between-flutter-devices/)
+-- [Flutter Doctor command](https://dartcode.org/docs/commands/#flutter-run-flutter-doctor)
+-- [Flutter Get Packages command](https://dartcode.org/docs/commands/#flutter-get-packages)
+-- [Flutter Upgrade Packages command](https://dartcode.org/docs/commands/#flutter-upgrade-packages)
+-- [Automatically gets packages when `pubspec.yaml` is saved](https://dartcode.org/docs/settings/#dartrunpubgetonpubspecchanges)
+-- [Automatically finds SDKs from `PATH`](https://dartcode.org/docs/configuring-path-and-environment-variables/)
+-- [Notification of new stable Dart SDK releases](https://dartcode.org/docs/settings/#dartcheckforsdkupdates)
+-- [Sort Members command](https://dartcode.org/docs/commands/#dart-sort-members)
+-- Support for debugging "just my code" or SDK/libraries too ([`dart.debugSdkLibraries`](https://dartcode.org/docs/settings/#dartdebugsdklibraries) and [`dart.debugExternalPackageLibraries`](https://dartcode.org/docs/settings/#dartdebugexternalpackagelibraries))
+-- [Prompts to get packages when out of date](https://dartcode.org/docs/settings/#dartprompttogetpackages)
++- Automatic hot reloads for DartNative
++- Refactorings and Code fixes (lightbulb)
++- Quickly switch between devices for DartNative
++- DartNative Doctor command
++- DartNative Get Packages command
++- DartNative Upgrade Packages command
++- Automatically gets packages when `pubspec.yaml` is saved
++- Automatically finds SDKs from `PATH`
++- Notification of new stable Dart SDK releases
++- Sort Members command
++- Support for debugging "just my code" or SDK/libraries too ([`dart.debugSdkLibraries`] and [`dart.debugExternalPackageLibraries`])
++- Prompts to get packages when out of date
+ - Syntax highlighting
+ - Code completion
+-- [Snippets](https://github.com/Dart-Code/Dart-Code/tree/master/snippets)
++- Snippets
+ - Realtime errors/warnings/TODOs
+ - Documentation in hovers/tooltips
+ - Go to Definition
+@@ -48,44 +49,38 @@ If you have any issues using Dart Code, please file issues on GitHub at [https:/
+ - Support for format-on-type (`editor.formatOnType`)
+ - Workspace symbol search
+ - Document symbol search
+-- [Organize Imports command](https://dartcode.org/docs/commands/#dart-organize-imports)
+-- [Pub Get Packages command](https://dartcode.org/docs/commands/#pub-get-packages)
+-- [Pub Upgrade Packages command](https://dartcode.org/docs/commands/#pub-upgrade-packages)
+-- [Type Hierarchy](https://dartcode.org/docs/commands/#dart-show-type-hierarchy)
+-
++- Organize Imports command
++- Pub Get Packages command
++- Pub Upgrade Packages command
++- Type Hierarchy
+ 
+ ## Extension Settings
+ 
+ A full list of settings is [available here](https://dartcode.org/docs/settings/).
+ 
+-
+ ## Frequently Asked Questions
+ 
+ A list of frequently asked questions is [available here](https://dartcode.org/faq/).
+ 
+-
+ ## Key Bindings
+ 
+ A list of useful key bindings is [available here](https://dartcode.org/docs/key-bindings/).
+ 
+-
+ ## Refactorings and Code Fixes
+ 
+ A full list of supported refactors is [available here](https://dartcode.org/docs/refactorings-and-code-fixes/).
+ 
+-
+ ## Analytics
+ 
+ This extension reports some analytics such as:
+ 
+ - Extension load and analysis times
+-- Version numbers for the Dart/Flutter extensions and SDKs
+-- The values of some settings (such as Flutter UI Guidelines and Format-on-Save)
++- Version numbers for the Dart/DartNative extensions and SDKs
++- The values of some settings (such as DartNative UI Guidelines and Format-on-Save)
+ - Frequency of use of features like Hot Reload and Hot Restart
+ 
+ Reporting can be disabled via VS Code's standard **Telemetry: Telemetry Level** setting.
+ 
+-
+ ## Release Notes
+ 
+ For full release notes, see [the changelog](https://dartcode.org/releases/).
 diff --git a/eslint.config.js b/eslint.config.js
 index 1454e5b5..d82c5643 100644
 --- a/eslint.config.js
@@ -452,37 +1169,63 @@ index a5aa503b..ea5280f3 100644
  	}
  
 diff --git a/src/extension/commands/add_sdk_to_path.ts b/src/extension/commands/add_sdk_to_path.ts
-index 859a741a..a092feb4 100644
+index 859a741a..373dbccc 100644
 --- a/src/extension/commands/add_sdk_to_path.ts
 +++ b/src/extension/commands/add_sdk_to_path.ts
-@@ -159,6 +159,14 @@ export class AddSdkToPathCommands extends AddSdkToPath implements IAmDisposable
+@@ -7,14 +7,29 @@ import { IAmDisposable, Logger } from "../../shared/interfaces";
+ import { disposeAll } from "../../shared/utils";
+ import { envUtils } from "../../shared/vscode/utils";
+ import { WorkspaceContext } from "../../shared/workspace";
++import { validateDartNativeSdkFolder } from "../../shared/dartnative/sdk_validation";
+ import { AddSdkToPathResult, Analytics } from "../analytics";
++import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
+ import { runToolProcess } from "../utils/processes";
+ 
+ export class AddSdkToPath {
+-	constructor(private readonly logger: Logger, private readonly context: vs.ExtensionContext, private readonly analytics: Analytics) { }
++	constructor(protected readonly logger: Logger, protected readonly context: vs.ExtensionContext, protected readonly analytics: Analytics, protected readonly wsContext?: WorkspaceContext) { }
+ 
+ 	public async addToPath(sdkType: SdkTypeString, sdkPath: string | undefined): Promise<void> {
+-		if (!sdkPath) {
++		const isDartNative = sdkType === "DartNative" || !!this.wsContext?.hasAnyDartNativeProjects;
++		if (isDartNative) {
++			if (!sdkPath) {
++				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK before adding it to PATH.", "dartnative.addSdkToPath");
++				return;
++			}
++			const validation = validateDartNativeSdkFolder(sdkPath);
++			if (!validation.valid || !validation.sdkPath) {
++				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK before adding it to PATH.", "dartnative.addSdkToPath");
++				return;
++			}
++			sdkPath = validation.sdkPath;
++			sdkType = "DartNative";
++		} else if (!sdkPath) {
+ 			void vs.window.showErrorMessage(noSdkAvailablePrompt);
+ 			return;
+ 		}
+@@ -158,16 +173,12 @@ export class AddSdkToPathCommands extends AddSdkToPath implements IAmDisposable
+ 	private disposables: IAmDisposable[] = [];
  
  	constructor(logger: Logger, context: vs.ExtensionContext, wsContext: WorkspaceContext, analytics: Analytics) {
- 		super(logger, context, analytics);
-+		const isDartNative = () => {
-+			const flutterSdk = wsContext.sdks.flutter;
-+			return !!(flutterSdk && (
-+				fs.existsSync(path.join(flutterSdk, "bin", "dn"))
-+				|| fs.existsSync(path.join(flutterSdk, "bin", "dn.bat"))
-+			));
-+		};
-+
- 		this.disposables.push(vs.commands.registerCommand("dart.addSdkToPath", async () => {
- 			if (wsContext.sdks.dartSdkIsFromFlutter) {
- 				return vs.commands.executeCommand("flutter.addSdkToPath");
-@@ -166,7 +174,11 @@ export class AddSdkToPathCommands extends AddSdkToPath implements IAmDisposable
- 			await this.addToPath("Dart", wsContext.sdks.dart);
- 		}));
- 		this.disposables.push(vs.commands.registerCommand("flutter.addSdkToPath", async () => {
+-		super(logger, context, analytics);
+-		this.disposables.push(vs.commands.registerCommand("dart.addSdkToPath", async () => {
+-			if (wsContext.sdks.dartSdkIsFromFlutter) {
+-				return vs.commands.executeCommand("flutter.addSdkToPath");
+-			}
+-			await this.addToPath("Dart", wsContext.sdks.dart);
+-		}));
+-		this.disposables.push(vs.commands.registerCommand("flutter.addSdkToPath", async () => {
 -			await this.addToPath("Flutter", wsContext.sdks.flutter);
-+			const sdkType: SdkTypeString = isDartNative() ? "DartNative" : "Flutter";
-+			await this.addToPath(sdkType, wsContext.sdks.flutter);
-+		}));
++		super(logger, context, analytics, wsContext);
++
 +		this.disposables.push(vs.commands.registerCommand("dartnative.addSdkToPath", async () => {
 +			await this.addToPath("DartNative", wsContext.sdks.flutter);
  		}));
++		this.disposables.push(vs.commands.registerCommand("flutter.addSdkToPath", () => vs.commands.executeCommand("dartnative.addSdkToPath")));
  	}
  
+ 	public dispose(): void {
 diff --git a/src/extension/commands/debug.ts b/src/extension/commands/debug.ts
 index 9752e2c3..a6df3eaf 100644
 --- a/src/extension/commands/debug.ts
@@ -615,6 +1358,87 @@ index 9752e2c3..a6df3eaf 100644
  					await new Promise((resolve) => setTimeout(resolve, 400));
  				}
  				progress.complete();
+diff --git a/src/extension/commands/flutter.ts b/src/extension/commands/flutter.ts
+index ebec673c..71fd3ebe 100644
+--- a/src/extension/commands/flutter.ts
++++ b/src/extension/commands/flutter.ts
+@@ -5,11 +5,12 @@ import * as vs from "vscode";
+ import { DartCapabilities } from "../../shared/capabilities/dart";
+ import { FlutterCapabilities } from "../../shared/capabilities/flutter";
+ import { vsCodeVersion } from "../../shared/capabilities/vscode";
+-import { CommandSource, defaultLaunchJson, ExtensionRestartReason, flutterCreateAvailablePlatforms, flutterCreateTemplatesSupportingPlatforms } from "../../shared/constants";
++import { CommandSource, defaultLaunchJson, executableNames, ExtensionRestartReason, flutterCreateAvailablePlatforms, flutterCreateTemplatesSupportingPlatforms } from "../../shared/constants";
+ import { DartWorkspaceContext, FlutterCreateCommandArgs, FlutterCreateTriggerData, FlutterProjectTemplate, Logger } from "../../shared/interfaces";
+ import { RunProcessResult } from "../../shared/processes";
+ import { sortBy } from "../../shared/utils/array";
+ import { stripMarkdown } from "../../shared/utils/dartdocs";
++import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
+ import { fsPath, isFlutterProjectFolder, mkDirRecursive, nextAvailableFilename } from "../../shared/utils/fs";
+ import { writeFlutterSdkSettingIntoProject, writeFlutterTriggerFile } from "../../shared/utils/projects";
+ import { FlutterDeviceManager } from "../../shared/vscode/device_manager";
+@@ -22,6 +23,7 @@ import { Context } from "../../shared/vscode/workspace";
+ import { Analytics } from "../analytics";
+ import { config } from "../config";
+ import { getFlutterSnippets } from "../sdk/flutter_docs_snippets";
++import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
+ import { SdkUtils } from "../sdk/utils";
+ import * as util from "../utils";
+ import { editSetting, showInputBoxWithSettings, showSimpleSettingsEditor } from "../utils/vscode/input";
+@@ -146,6 +148,26 @@ export class FlutterCommands extends BaseSdkCommands {
+ 	}
+ 
+ 	public flutterDoctor(options?: { commandSource?: string }) {
++		const isDartNative = this.workspace.hasAnyDartNativeProjects
++			|| (this.workspace.firstFlutterProject && isDartNativeProjectFolder(this.workspace.firstFlutterProject))
++			|| (vs.workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
++			|| !!config.dartNativeSdkPath;
++
++		if (isDartNative) {
++			const dnBinary = this.workspace.sdks.flutter ? path.join(this.workspace.sdks.flutter, "bin", executableNames.dn) : undefined;
++			if (!dnBinary || !fs.existsSync(dnBinary)) {
++				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to run doctor.", "flutter.doctor");
++				return;
++			}
++
++			this.analytics.logFlutterDoctor(options?.commandSource);
++
++			const tempDir = path.join(os.tmpdir(), "dart-code-cmd-run");
++			if (!fs.existsSync(tempDir))
++				fs.mkdirSync(tempDir);
++			return this.runFlutterInFolder(tempDir, ["doctor", "-v"], "DartNative", true, undefined, this.workspace.config?.flutterDoctorScript);
++		}
++
+ 		if (!this.workspace.sdks.flutter) {
+ 			this.sdkUtils.showFlutterActivationFailure("flutter.doctor");
+ 			return;
+@@ -160,6 +182,27 @@ export class FlutterCommands extends BaseSdkCommands {
+ 	}
+ 
+ 	private async flutterUpgrade() {
++		const isDartNative = this.workspace.hasAnyDartNativeProjects
++			|| (this.workspace.firstFlutterProject && isDartNativeProjectFolder(this.workspace.firstFlutterProject))
++			|| (vs.workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
++			|| !!config.dartNativeSdkPath;
++
++		if (isDartNative) {
++			const dnBinary = this.workspace.sdks.flutter ? path.join(this.workspace.sdks.flutter, "bin", executableNames.dn) : undefined;
++			if (!dnBinary || !fs.existsSync(dnBinary)) {
++				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to upgrade.", "flutter.upgrade");
++				return;
++			}
++
++			commandState.promptToReloadOnVersionChanges = false;
++			const tempDir = path.join(os.tmpdir(), "dart-code-cmd-run");
++			if (!fs.existsSync(tempDir))
++				fs.mkdirSync(tempDir);
++			await this.runFlutterInFolder(tempDir, ["upgrade"], "DartNative", true);
++			await util.promptToReloadExtension(this.logger, { restartReason: ExtensionRestartReason.AfterFlutterUpgrade });
++			return;
++		}
++
+ 		if (!this.workspace.sdks.flutter) {
+ 			this.sdkUtils.showFlutterActivationFailure("flutter.upgrade");
+ 			return;
 diff --git a/src/extension/commands/packages.ts b/src/extension/commands/packages.ts
 index d1940504..93ddc011 100644
 --- a/src/extension/commands/packages.ts
@@ -837,7 +1661,7 @@ index d1940504..93ddc011 100644
  		} finally {
  			isFetchingPackages = false;
 diff --git a/src/extension/commands/sdk.ts b/src/extension/commands/sdk.ts
-index 8e18b39b..a4511ec5 100644
+index 8e18b39b..ebb46315 100644
 --- a/src/extension/commands/sdk.ts
 +++ b/src/extension/commands/sdk.ts
 @@ -2,16 +2,19 @@ import * as fs from "fs";
@@ -861,30 +1685,36 @@ index 8e18b39b..a4511ec5 100644
  import { DartSdkManager, FlutterSdkManager } from "../sdk/sdk_manager";
  import * as util from "../utils";
  import { getGlobalFlutterArgs, safeToolSpawn } from "../utils/processes";
-@@ -56,35 +59,95 @@ export class BaseSdkCommands implements IAmDisposable {
+@@ -56,35 +59,100 @@ export class BaseSdkCommands implements IAmDisposable {
  	}
  
  	public runFlutter(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
 -		return this.runCommandForWorkspace(this.runFlutterInFolder.bind(this), `Select the folder to run "flutter ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
-+		const isDartNative = selection && isDartNativeProjectFolder(fsPath(selection));
++		const isDartNative = (selection && (isDartNativeProjectFolder(fsPath(selection)) || util.isInsideDartNativeProject(selection)))
++			|| this.workspace.hasAnyDartNativeProjects;
 +		const toolName = isDartNative ? "dn" : "flutter";
 +		return this.runCommandForWorkspace(this.runFlutterInFolder.bind(this), `Select the folder to run "${toolName} ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
  	}
  
  	public runFlutterInFolder(folder: string, args: string[], packageOrFolderDisplayName: string | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, customScript?: CustomScript): Promise<RunProcessResult | undefined> {
 -		if (!this.sdks.flutter)
-+		const isDartNative = isDartNativeProjectFolder(folder);
++		const isDartNative = isDartNativeProjectFolder(folder)
++			|| util.isInsideDartNativeProject(vs.Uri.file(folder))
++			|| this.workspace.hasAnyDartNativeProjects;
 +		const dnBinaryPath = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
 +		const flutterBinaryPath = this.sdks.flutter ? path.join(this.sdks.flutter, flutterPath) : undefined;
 +
 +		if (isDartNative) {
 +			if (!dnBinaryPath || !fs.existsSync(dnBinaryPath)) {
-+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK.");
-+				throw new Error("DartNative binary ('dn') not found.");
++				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to run this command.");
++				return Promise.resolve(undefined);
 +			}
 +		} else if (!this.sdks.flutter) {
  			throw new Error("Flutter SDK not available");
 +		}
++
++		if (isDartNative && (!packageOrFolderDisplayName || packageOrFolderDisplayName === "flutter"))
++			packageOrFolderDisplayName = "DartNative";
 +
 +		const defaultExec = isDartNative ? dnBinaryPath! : flutterBinaryPath!;
  
@@ -917,7 +1747,7 @@ index 8e18b39b..a4511ec5 100644
 +			allArgs = globalArgs.concat(subcommandArgs).concat(execution.args).concat(pubArgs);
 +
 +			const licenseKey = config.dartNativeLicenseKey?.trim();
-+			if (licenseKey && !allArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
++			if (subcommand === "run" && licenseKey && !allArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
 +				allArgs.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
 +			}
 +		} else {
@@ -932,28 +1762,27 @@ index 8e18b39b..a4511ec5 100644
  
  	public runPub(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
 -		return this.runCommandForWorkspace(this.runPubInFolder.bind(this), `Select the folder to run "pub ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
-+		const isDartNative = selection && isDartNativeProjectFolder(fsPath(selection));
++		const isDartNative = (selection && (isDartNativeProjectFolder(fsPath(selection)) || util.isInsideDartNativeProject(selection)))
++			|| this.workspace.hasAnyDartNativeProjects;
 +		const toolName = isDartNative ? "dn pub" : "pub";
 +		return this.runCommandForWorkspace(this.runPubInFolder.bind(this), `Select the folder to run "${toolName} ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
  	}
  
  	protected runPubInFolder(folder: string, args: string[], packageOrFolderDisplayName: string, alwaysShowOutput = false, operationProgress?: OperationProgress): Promise<RunProcessResult | undefined> {
-+		const isDartNative = isDartNativeProjectFolder(folder);
++		const isDartNative = isDartNativeProjectFolder(folder)
++			|| util.isInsideDartNativeProject(vs.Uri.file(folder))
++			|| this.workspace.hasAnyDartNativeProjects;
 +		const folderConfig = config.for(vs.Uri.file(folder));
 +		const pubAdditional = folderConfig.pubAdditionalArgs;
 +
 +		if (isDartNative) {
 +			const dnBinary = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
 +			if (!dnBinary || !fs.existsSync(dnBinary)) {
-+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Package operations for DartNative projects require the 'dn' tool.", "dart.getPackages");
-+				throw new Error("DartNative binary ('dn') not found. Package operations for DartNative projects require the 'dn' tool.");
++				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK.", "dart.getPackages");
++				return Promise.resolve(undefined);
 +			}
 +			const globalArgs = folderConfig.flutterAdditionalArgs;
 +			const dnArgs = globalArgs.concat(["pub", ...args]).concat(pubAdditional);
-+			const licenseKey = config.dartNativeLicenseKey?.trim();
-+			if (licenseKey && !dnArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
-+				dnArgs.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
-+			}
 +			return this.runCommandInFolder(packageOrFolderDisplayName, folder, dnBinary, dnArgs, alwaysShowOutput, operationProgress);
 +		}
 +
@@ -965,7 +1794,7 @@ index 8e18b39b..a4511ec5 100644
  
  		const pubExecution = getPubExecutionInfo(this.sdks.dart, args);
  
-@@ -138,6 +201,10 @@ export class BaseSdkCommands implements IAmDisposable {
+@@ -138,6 +206,10 @@ export class BaseSdkCommands implements IAmDisposable {
  						channel.show(true);
  				});
  
@@ -976,7 +1805,7 @@ index 8e18b39b..a4511ec5 100644
  				return proc;
  			}, existingProcess);
  			this.runningCommands[commandId] = process;
-@@ -166,10 +233,10 @@ export class SdkCommands extends BaseSdkCommands {
+@@ -166,10 +238,10 @@ export class SdkCommands extends BaseSdkCommands {
  		super(logger, context, workspace, dartCapabilities);
  		const dartSdkManager = new DartSdkManager(this.logger, this.workspace.sdks);
  		this.disposables.push(vs.commands.registerCommand("dart.changeSdk", () => dartSdkManager.changeSdk()));
@@ -991,11 +1820,128 @@ index 8e18b39b..a4511ec5 100644
  
  		// Monitor version files for SDK upgrades.
  		void this.setupVersionWatcher();
+diff --git a/src/extension/commands/widget_refactors.ts b/src/extension/commands/widget_refactors.ts
+new file mode 100644
+index 00000000..abe463e6
+--- /dev/null
++++ b/src/extension/commands/widget_refactors.ts
+@@ -0,0 +1,106 @@
++import * as vs from "vscode";
++import { config } from "../config";
++import { DartCodeScanner, generateExtractWidget, generateSingleWidgetWrapSnippet, TextRange } from "../refactors/widget_refactor_core";
++
++export class WidgetRefactorCommands implements vs.Disposable {
++	private readonly disposables: vs.Disposable[] = [];
++
++	constructor() {
++		this.disposables.push(
++			vs.commands.registerCommand("dart.refactor.extractWidget", (document?: vs.TextDocument, targetRange?: TextRange) => this.extractWidget(document, targetRange)),
++			vs.commands.registerCommand("dart.refactor.wrapWithWidget", (document?: vs.TextDocument, targetRange?: TextRange) => this.wrapWithWidget(document, targetRange)),
++		);
++	}
++
++	public async wrapWithWidget(document?: vs.TextDocument, targetRange?: TextRange): Promise<void> {
++		if (!config.enableWidgetRefactors) return;
++
++		const editor = vs.window.activeTextEditor;
++		if (!editor) return;
++
++		const doc = document ?? editor.document;
++		let range = targetRange;
++
++		if (!range) {
++			const selection = editor.selection;
++			const offset = doc.offsetAt(selection.start);
++			const scanner = new DartCodeScanner(doc.getText());
++			const widget = scanner.findEnclosingWidget(offset);
++			if (!widget) return;
++			range = { end: widget.end, start: widget.start };
++		}
++
++		const code = doc.getText();
++		const snippet = generateSingleWidgetWrapSnippet(code, range, "widget");
++		const startPos = doc.positionAt(range.start);
++		const endPos = doc.positionAt(range.end);
++		const editRange = new vs.Range(startPos, endPos);
++
++		await editor.insertSnippet(new vs.SnippetString(snippet), editRange, { keepWhitespace: true, undoStopAfter: true, undoStopBefore: true });
++		if (config.formatAfterRefactoring) {
++			void vs.commands.executeCommand("_dart.formatDocument");
++		}
++	}
++
++	public async extractWidget(document?: vs.TextDocument, targetRange?: TextRange): Promise<void> {
++		if (!config.enableWidgetRefactors) return;
++
++		const editor = vs.window.activeTextEditor;
++		if (!editor) return;
++
++		const doc = document ?? editor.document;
++		let range = targetRange;
++
++		if (!range) {
++			const selection = editor.selection;
++			const offset = doc.offsetAt(selection.start);
++			const scanner = new DartCodeScanner(doc.getText());
++			const widget = scanner.findEnclosingWidget(offset);
++			if (!widget) return;
++			range = { end: widget.end, start: widget.start };
++		}
++
++		const widgetName = await vs.window.showInputBox({
++			prompt: "Enter a name for the new widget",
++			validateInput: (value) => {
++				if (!value?.trim()) {
++					return "Widget name cannot be empty";
++				}
++				if (!/^[A-Z][a-zA-Z0-9_]*$/.test(value.trim())) {
++					return "Widget name must be a valid PascalCase identifier (e.g. MyWidget)";
++				}
++				return undefined;
++			},
++			value: "NewWidget",
++			valueSelection: [0, 9],
++		});
++
++		if (!widgetName?.trim()) {
++			return;
++		}
++
++		const code = doc.getText();
++		const name = widgetName.trim();
++		const extracted = generateExtractWidget(code, range, name);
++
++		const edit = new vs.WorkspaceEdit();
++		const startPos = doc.positionAt(range.start);
++		const endPos = doc.positionAt(range.end);
++		const editRange = new vs.Range(startPos, endPos);
++
++		edit.replace(doc.uri, editRange, extracted.usageText);
++		const endOfDoc = doc.positionAt(code.length);
++		edit.insert(doc.uri, endOfDoc, extracted.appendText);
++
++		await vs.workspace.applyEdit(edit);
++		if (config.formatAfterRefactoring) {
++			void vs.commands.executeCommand("_dart.formatDocument");
++		}
++	}
++
++	public dispose(): void {
++		for (const d of this.disposables) {
++			d.dispose();
++		}
++	}
++}
 diff --git a/src/extension/config.ts b/src/extension/config.ts
-index 71877abe..e995bafa 100644
+index 71877abe..24f4a937 100644
 --- a/src/extension/config.ts
 +++ b/src/extension/config.ts
-@@ -6,46 +6,90 @@ import { resolvePaths } from "../shared/vscode/utils";
+@@ -1,3 +1,4 @@
++import * as path from "path";
+ import { ConfigurationTarget, Uri, workspace, WorkspaceConfiguration } from "vscode";
+ import { CustomDevToolsConfig, GetSDKCommandConfig } from "../shared/interfaces";
+ import { NullAsUndefined, nullToUndefined } from "../shared/utils";
+@@ -6,46 +7,90 @@ import { resolvePaths } from "../shared/vscode/utils";
  import { DevToolsLocations, DevToolsLocationsWithDefault } from "./sdk/dev_tools/manager";
  import { insertWorkspaceName } from "./utils";
  
@@ -1100,7 +2046,7 @@ index 71877abe..e995bafa 100644
  	}
  
  	get addSdkToTerminalPath(): boolean { return this.getConfig<boolean>("addSdkToTerminalPath", true); }
-@@ -106,6 +150,10 @@ class Config {
+@@ -106,6 +151,10 @@ class Config {
  	get enableSdkFormatter(): boolean { return this.getConfig<boolean>("enableSdkFormatter", true); }
  	get enableServerSnippets(): boolean { return this.getConfig<boolean>("enableServerSnippets", true); }
  	get enableSnippets(): boolean { return this.getConfig<boolean>("enableSnippets", true); }
@@ -1111,7 +2057,21 @@ index 71877abe..e995bafa 100644
  	get env(): object { return this.getConfig<object>("env", {}); }
  	get evaluateToStringInDebugViews(): boolean { return this.getConfig<boolean>("evaluateToStringInDebugViews", true); }
  
-@@ -222,7 +270,25 @@ class Config {
+@@ -142,7 +191,12 @@ class Config {
+ 	}
+ 	get flutterRememberSelectedDevice(): boolean { return this.getConfig<boolean>("flutterRememberSelectedDevice", true); }
+ 	get flutterScreenshotPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterScreenshotPath", null)); }
+-	get flutterSdkPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterSdkPath", null)); }
++	get flutterSdkPath(): undefined | string {
++		const raw = resolvePaths(this.getConfig<null | string>("flutterSdkPath", null));
++		if (raw && path.basename(raw).toLowerCase() === "bin")
++			return path.dirname(raw);
++		return raw;
++	}
+ 	get flutterSdkPaths(): string[] { return this.getConfig<string[]>("flutterSdkPaths", []).map(resolvePaths); }
+ 	get flutterSelectDeviceWhenConnected(): boolean { return this.getConfig<boolean>("flutterSelectDeviceWhenConnected", true); }
+ 	get flutterShowEmulators(): "local" | "always" | "never" { return this.getConfig<"local" | "always" | "never">("flutterShowEmulators", "local"); }
+@@ -222,7 +276,26 @@ class Config {
  		return this.hasExplicitSetting("showTodos");
  	}
  
@@ -1131,13 +2091,14 @@ index 71877abe..e995bafa 100644
 +	get dartNativeTestAdditionalArgs(): string[] { return this.for().dartNativeTestAdditionalArgs; }
 +
 +	get dartNativeLicenseKey(): undefined | string { return this.getConfig<null | string>("dartNativeLicenseKey", null); }
++	get showCommandsWhenSdkMissing(): boolean { return this.getConfig<boolean>("showCommandsWhenSdkMissing", false); }
 +
  	// Options that can be set programatically.
 +	public setDartNativeLicenseKey(value: string | undefined, target: ConfigurationTarget): Promise<void> { return this.setConfig("dartNativeLicenseKey", value, target); }
  	public setShowDebuggerNumbersAsHex(value: true | undefined): Promise<void> { return this.setConfig("showDebuggerNumbersAsHex", value, ConfigurationTarget.Global); }
  	public setCheckForSdkUpdates(value: boolean): Promise<void> { return this.setConfig("checkForSdkUpdates", value, ConfigurationTarget.Global); }
  	public setFlutterCreateOrganization(value: string | undefined): Promise<void> { return this.setConfig("flutterCreateOrganization", value, ConfigurationTarget.Global); }
-@@ -231,10 +297,12 @@ class Config {
+@@ -231,10 +304,12 @@ class Config {
  	public setFlutterCreatePlatforms(value: string[] | undefined): Promise<void> { return this.setConfig("flutterCreatePlatforms", value, ConfigurationTarget.Global); }
  	public setFlutterCreatePromptForPlatforms(value: boolean | undefined): Promise<void> { return this.setConfig("flutterCreatePromptForPlatforms", value, ConfigurationTarget.Global); }
  	public setFlutterSdkPath(value: string | undefined, target: ConfigurationTarget): Promise<void> { return this.setConfig("flutterSdkPath", value, target); }
@@ -1150,7 +2111,7 @@ index 71877abe..e995bafa 100644
  	public setOffline(value: boolean | undefined): Promise<void> { return this.setConfig("offline", value, ConfigurationTarget.Global); }
  	public setOpenDevTools(value: "never" | "flutter" | "always" | undefined): Promise<void> { return this.setConfig("openDevTools", value, ConfigurationTarget.Global); }
  	public setShowInspectorNotificationsForWidgetErrors(value: boolean): Promise<void> { return this.setConfig("showInspectorNotificationsForWidgetErrors", value, ConfigurationTarget.Global); }
-@@ -260,24 +328,49 @@ class ResolvedConfig {
+@@ -260,24 +335,49 @@ class ResolvedConfig {
  	private readonly dartConfig = workspace.getConfiguration("", this.dummyDartFile).get("[dart]") as any;
  
  	public getAppliedConfig<T>(section: string, key: string, isResourceScoped = true): T | undefined {
@@ -1205,7 +2166,7 @@ index 71877abe..e995bafa 100644
  	}
  
  	get analysisExcludedFolders(): string[] { return this.getConfig<string[]>("analysisExcludedFolders", []); }
-@@ -303,6 +396,13 @@ export class ResourceConfig {
+@@ -303,6 +403,13 @@ export class ResourceConfig {
  	get flutterSdkPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterSdkPath", null)); }
  	get flutterSdkPaths(): string[] { return this.getConfig<string[]>("flutterSdkPaths", []).map(resolvePaths); }
  	get flutterTestAdditionalArgs(): string[] { return this.getConfig<string[]>("flutterTestAdditionalArgs", []); }
@@ -1219,11 +2180,32 @@ index 71877abe..e995bafa 100644
  	get hotReloadPatterns(): string[] { return this.getConfig<string[]>("hotReloadPatterns", []); }
  	get insertArgumentPlaceholders(): boolean { return this.getConfig<boolean>("insertArgumentPlaceholders", true); }
  	get lineLength(): number { return this.getConfig<number>("lineLength", 80); }
+@@ -325,6 +432,7 @@ export class ResourceConfig {
+ 	get toolingDaemonLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("toolingDaemonLogFile", null)))); }
+ 	get vmAdditionalArgs(): string[] { return this.getConfig<string[]>("vmAdditionalArgs", []); }
+ 	get webDaemonLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("webDaemonLogFile", null)))); }
++	get showCommandsWhenSdkMissing(): boolean { return this.getConfig<boolean>("showCommandsWhenSdkMissing", false); }
+ }
+ 
+ export const config = new Config();
 diff --git a/src/extension/extension.ts b/src/extension/extension.ts
-index 4bc3697d..9dced7a0 100644
+index 4bc3697d..588d3bfd 100644
 --- a/src/extension/extension.ts
 +++ b/src/extension/extension.ts
-@@ -52,6 +52,7 @@ import { PackageCommands } from "./commands/packages";
+@@ -1,10 +1,11 @@
++import * as fs from "fs";
+ import * as os from "os";
+ import * as path from "path";
+ import * as process from "process";
+ import * as vs from "vscode";
+ import { DartCapabilities } from "../shared/capabilities/dart";
+ import { FlutterCapabilities } from "../shared/capabilities/flutter";
+-import { ExtensionRestartReason, dartCodeConfigurationPathEnvironmentVariableName, dartPlatformName, defaultDartCodeConfigurationPath, flutterExtensionIdentifier, isDartCodeTestRun, isMac, platformDisplayName, setFlutterDev, showLogAction } from "../shared/constants";
++import { ExtensionRestartReason, dartCodeConfigurationPathEnvironmentVariableName, dartPlatformName, defaultDartCodeConfigurationPath, executableNames, flutterExtensionIdentifier, isDartCodeTestRun, isMac, platformDisplayName, setFlutterDev, showLogAction } from "../shared/constants";
+ import { DART_PLATFORM_NAME, DART_PROJECT_LOADED, FLUTTER_PROJECT_LOADED, FLUTTER_PROPERTY_EDITOR_SUPPORTED_CONTEXT, FLUTTER_SUPPORTS_ATTACH, GO_TO_IMPORTS_SUPPORTED_CONTEXT, IS_RUNNING_LOCALLY_CONTEXT, OBSERVATORY_SUPPORTED_CONTEXT, PROJECT_LOADED, SDK_IS_PRE_RELEASE, WEB_PROJECT_LOADED } from "../shared/constants.contexts";
+ import { LogCategory } from "../shared/enums";
+ import { WebClient } from "../shared/fetch";
+@@ -52,6 +53,7 @@ import { PackageCommands } from "./commands/packages";
  import { SdkCommands } from "./commands/sdk";
  import { SettingsCommands } from "./commands/settings";
  import { TestCommands, isInImplementationFileThatCanHaveTest, isInTestFileThatHasImplementation } from "./commands/test";
@@ -1231,7 +2213,7 @@ index 4bc3697d..9dced7a0 100644
  import { config } from "./config";
  import { DartTaskProvider } from "./dart/dart_task_provider";
  import { HotReloadOnSaveHandler } from "./dart/hot_reload_save_handler";
-@@ -82,6 +83,7 @@ import { DartDebugAdapterRemoveErrorShowUserFactory } from "./providers/debug_ad
+@@ -82,6 +84,7 @@ import { DartDebugAdapterRemoveErrorShowUserFactory } from "./providers/debug_ad
  import { DebugConfigProvider, DynamicDebugConfigProvider, InitialLaunchJsonDebugConfigProvider } from "./providers/debug_config_provider";
  import { DartMcpServerDefinitionProvider } from "./providers/mcp_server_definition_provider";
  import { SnippetCompletionItemProvider } from "./providers/snippet_completion_item_provider";
@@ -1239,7 +2221,7 @@ index 4bc3697d..9dced7a0 100644
  import { PubGlobal } from "./pub/global";
  import { ExtensionRecommentations } from "./recommendations/recommendations";
  import { DevToolsManager } from "./sdk/dev_tools/manager";
-@@ -93,11 +95,12 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
+@@ -93,11 +96,12 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
  import * as util from "./utils";
  import { promptToReloadExtension } from "./utils";
  import { addToLogHeader, clearLogHeader, getExtensionLogPath, getLogHeader } from "./utils/log";
@@ -1253,7 +2235,80 @@ index 4bc3697d..9dced7a0 100644
  
  let maybeAnalyzer: LspAnalyzer | undefined;
  let flutterDaemon: IFlutterDaemon | undefined;
-@@ -211,9 +214,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -141,6 +145,7 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+ 	// Clear any caches, for example projects that we detected. We might be reloading because
+ 	// a Flutter project was added to a Dart-only workspace.
+ 	clearCaches();
++	config.reload();
+ 
+ 	void vs.commands.executeCommand("setContext", IS_RUNNING_LOCALLY_CONTEXT, isRunningLocally);
+ 	buildLogHeaders();
+@@ -162,6 +167,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+ 		logger.info("Done reloading extension!");
+ 	}));
+ 
++	const workspaceContextHolder: { current?: WorkspaceContext } = {};
++
++	// Commands that must be available unconditionally, even before SDKs are found or if SDKs are missing.
++	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
++	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, workspaceContextHolder.current?.sdks)));
++
+ 	// Configure if using flutter-dev.
+ 	setFlutterDev(config.useFlutterDev);
+ 
+@@ -171,19 +182,31 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+ 	analytics = new Analytics(logger);
+ 
+ 	// Helper to set the tool env using current analytics/env settings.
+-	const setEnvHelper = () => setupToolEnv({ suppressAnalytics: analytics.isSuppressed, envOverrides: config.env });
++	const setEnvHelper = () => setupToolEnv({
++		envOverrides: config.env,
++		licenseKey: config.dartNativeLicenseKey,
++		suppressAnalytics: analytics.isSuppressed,
++	});
+ 	setEnvHelper(); // Set initial values.
+ 
+ 	// Rebuild toolEnv when related config changes. This needs to be set up before the SDK search, since it
+ 	// is what causes the config reload when the SDK paths are selected during "Locate SDK".
+ 	context.subscriptions.push(vs.workspace.onDidChangeConfiguration((e) => {
+ 		config.reload();
+-		if (e.affectsConfiguration("dart.env") || e.affectsConfiguration("dart.allowAnalytics") || e.affectsConfiguration("telemetry.telemetryLevel"))
++		if (e.affectsConfiguration("dart.env") || e.affectsConfiguration("dart.allowAnalytics") || e.affectsConfiguration("telemetry.telemetryLevel") || e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartx.dartNativeLicenseKey"))
+ 			setEnvHelper();
++		if (e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartx.dartNativeLicenseKey"))
++			syncLicenseKeyEnv();
++		if (e.affectsConfiguration("dart.showCommandsWhenSdkMissing") || e.affectsConfiguration("dartx.showCommandsWhenSdkMissing")) {
++			const show = config.showCommandsWhenSdkMissing;
++			void vs.commands.executeCommand("setContext", PROJECT_LOADED, show);
++			void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, show);
++		}
+ 	}));
+ 
+ 	const sdkUtils = new SdkUtils(logger, context, analytics);
+ 	const workspaceContextUnverified = await sdkUtils.scanWorkspace();
++	workspaceContextHolder.current = workspaceContextUnverified;
+ 	extensionApiModel.setSdks(workspaceContextUnverified.sdks);
+ 	analytics.workspaceContext = workspaceContextUnverified;
+ 	setEnvHelper(); // analytics.workspaceContext could affect suppression.
+@@ -196,7 +219,16 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+ 	setupLog(config.toolingDaemonLogFile, LogCategory.DartToolingDaemon);
+ 	setupLog(config.devToolsLogFile, LogCategory.DevTools);
+ 
+-	if (!workspaceContextUnverified.sdks.dart || (workspaceContextUnverified.hasAnyFlutterProjects && !workspaceContextUnverified.sdks.flutter)) {
++	const hasMissingDartNativeSdk = !config.dartNativeSdkPath
++		|| !workspaceContextUnverified.sdks.flutter
++		|| !fs.existsSync(path.join(workspaceContextUnverified.sdks.flutter, "bin", executableNames.dn));
++
++	if (!workspaceContextUnverified.sdks.dart || (workspaceContextUnverified.hasAnyFlutterProjects && !workspaceContextUnverified.sdks.flutter) || hasMissingDartNativeSdk) {
++		if (config.showCommandsWhenSdkMissing) {
++			setCommandVisiblity(true, workspaceContextUnverified);
++			void vs.commands.executeCommand("setContext", PROJECT_LOADED, true);
++			void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, true);
++		}
+ 		// Don't set anything else up; we can't work like this!
+ 		sdkUtils.handleMissingSdks(workspaceContextUnverified);
+ 		return;
+@@ -211,9 +243,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	void vs.commands.executeCommand("setContext", SDK_IS_PRE_RELEASE, sdks.isPreReleaseSdk);
  
  
@@ -1268,7 +2323,7 @@ index 4bc3697d..9dced7a0 100644
  		setEnvHelper(); // Update
  	}
  
-@@ -229,8 +236,20 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -229,15 +265,39 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  		const baseSdk = workspaceContext.hasAnyFlutterProjects
  			? sdks.flutter
  			: sdks.dart;
@@ -1291,16 +2346,27 @@ index 4bc3697d..9dced7a0 100644
  	} else {
  		// Since the value persists (which we want, so upon reload we don't miss
  		// any terminals that were already restored before we activated), we need
-@@ -346,6 +365,8 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
- 	context.subscriptions.push(flutterCommands);
- 	context.subscriptions.push(packageCommands);
- 	context.subscriptions.push(addDependencyCommand);
-+	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
-+	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, sdks)));
+ 		// to explicitly remove the path when the setting is disabled.
+-		context.environmentVariableCollection.clear();
++		context.environmentVariableCollection.delete("PATH");
+ 	}
  
- 	// Handle new projects before creating the analyer to avoid a few issues with
- 	// showing errors while packages are fetched, plus issues like
-@@ -454,6 +475,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
++	const syncLicenseKeyEnv = () => {
++		const key = config.dartNativeLicenseKey?.trim();
++		if (key) {
++			context.environmentVariableCollection.replace("DN_LICENSE_KEY", key);
++			process.env.DN_LICENSE_KEY = key;
++		} else {
++			context.environmentVariableCollection.delete("DN_LICENSE_KEY");
++			delete process.env.DN_LICENSE_KEY;
++		}
++	};
++	syncLicenseKeyEnv();
++
+ 	// TODO: Move these capabilities into WorkspaceContext.
+ 	if (sdks.dartVersion) {
+ 		dartCapabilities.version = sdks.dartVersion;
+@@ -454,6 +514,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/dart.json", () => true)));
  	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/flutter.json", (uri) => util.isInsideFlutterProject(uri))));
  
@@ -1313,6 +2379,15 @@ index 4bc3697d..9dced7a0 100644
  	context.subscriptions.push(DartLanguageConfiguration.register(DART_LANGUAGE));
  
  	context.subscriptions.push(new FileChangeWarnings());
+@@ -909,7 +975,7 @@ export async function deactivate(isRestart = false, reason: ExtensionRestartReas
+ function setCommandVisiblity(enable: boolean, workspaceContext?: WorkspaceContext) {
+ 	void vs.commands.executeCommand("setContext", PROJECT_LOADED, enable);
+ 	void vs.commands.executeCommand("setContext", DART_PROJECT_LOADED, enable && workspaceContext?.hasAnyStandardDartProjects);
+-	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && workspaceContext?.hasAnyFlutterProjects);
++	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && (workspaceContext?.hasAnyFlutterProjects || workspaceContext?.hasAnyDartNativeProjects));
+ 	void vs.commands.executeCommand("setContext", WEB_PROJECT_LOADED, enable && workspaceContext?.hasAnyWebProjects);
+ }
+ 
 diff --git a/src/extension/flutter/daemon_message_handler.ts b/src/extension/flutter/daemon_message_handler.ts
 index 38a96f60..6d7ff37e 100644
 --- a/src/extension/flutter/daemon_message_handler.ts
@@ -1368,7 +2443,7 @@ index 38a96f60..6d7ff37e 100644
  	context.subscriptions.push(daemon.registerForDaemonShowMessage((l: ShowMessage) => {
  		const title = l.title.trim().endsWith(".") ? l.title.trim() : `${l.title.trim()}.`;
 diff --git a/src/extension/providers/debug_adapter_descriptor_factory.ts b/src/extension/providers/debug_adapter_descriptor_factory.ts
-index bdb69fa6..27eb416c 100644
+index bdb69fa6..6a440c86 100644
 --- a/src/extension/providers/debug_adapter_descriptor_factory.ts
 +++ b/src/extension/providers/debug_adapter_descriptor_factory.ts
 @@ -1,3 +1,4 @@
@@ -1409,20 +2484,20 @@ index bdb69fa6..27eb416c 100644
 +			const conf = session?.configuration as { cwd?: string; program?: string } | undefined;
 +			const cwd = typeof conf?.cwd === "string" ? conf.cwd : undefined;
 +			const program = typeof conf?.program === "string" ? conf.program : undefined;
-+			const isDartNative = (session?.workspaceFolder && isDartNativeProjectFolder(fsPath(session.workspaceFolder.uri)))
++			const isDartNative = this.workspaceContext.hasAnyDartNativeProjects
++				|| (session?.workspaceFolder && isDartNativeProjectFolder(fsPath(session.workspaceFolder.uri)))
 +				|| (cwd && isDartNativeProjectFolder(cwd))
-+				|| (program && isPathInsideDartNativeProject(program))
-+				|| (this.sdks.flutter && fs.existsSync(path.join(this.sdks.flutter, "bin", executableNames.dn)));
++				|| (program && isPathInsideDartNativeProject(program));
 +
-+			let flutterExecutable = this.sdks.flutter ? path.join(this.sdks.flutter, flutterPath) : executableNames.flutter;
-+			if (isDartNative && this.sdks.flutter) {
-+				const dnPath = path.join(this.sdks.flutter, "bin", executableNames.dn);
-+				if (fs.existsSync(dnPath))
-+					flutterExecutable = dnPath;
-+			} else if (this.sdks.flutter && !fs.existsSync(flutterExecutable)) {
-+				const dnPath = path.join(this.sdks.flutter, "bin", executableNames.dn);
-+				if (fs.existsSync(dnPath))
-+					flutterExecutable = dnPath;
++			let flutterExecutable: string;
++			if (isDartNative) {
++				const dnPath = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
++				if (!dnPath || !fs.existsSync(dnPath)) {
++					throw new Error("DartNative binary ('dn') not found. Please locate your DartNative SDK.");
++				}
++				flutterExecutable = dnPath;
++			} else {
++				flutterExecutable = this.sdks.flutter ? path.join(this.sdks.flutter, flutterPath) : executableNames.flutter;
 +			}
  			const executable = isDartOrDartTest
  				? path.join(this.sdks.dart, dartVMPath)
@@ -1432,22 +2507,70 @@ index bdb69fa6..27eb416c 100644
  			const args = ["debug_adapter"];
  			if (isDartTestOrFlutterTest)
 diff --git a/src/extension/providers/debug_config_provider.ts b/src/extension/providers/debug_config_provider.ts
-index 280fe788..e2f31549 100644
+index 280fe788..105e8b0a 100644
 --- a/src/extension/providers/debug_config_provider.ts
 +++ b/src/extension/providers/debug_config_provider.ts
-@@ -692,6 +692,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
+@@ -3,7 +3,9 @@ import * as path from "path";
+ import * as vs from "vscode";
+ import { CancellationToken, DebugConfiguration, DebugConfigurationProvider, ProviderResult, Uri, window, workspace, WorkspaceFolder } from "vscode";
+ import { FlutterCapabilities } from "../../shared/capabilities/flutter";
+-import { fiveSecondsInMs, isDartCodeTestRun, runAnywayAction, showErrorsAction } from "../../shared/constants";
++import { executableNames, fiveSecondsInMs, isDartCodeTestRun, runAnywayAction, showErrorsAction } from "../../shared/constants";
++import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
++import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
+ import { HAS_LAST_DEBUG_CONFIG, HAS_LAST_TEST_DEBUG_CONFIG } from "../../shared/constants.contexts";
+ import { DartLaunchArgs, DartVsCodeLaunchArgs } from "../../shared/debugging/interfaces";
+ import { DebuggerType, debuggerTypeFromString, VmServiceExtension } from "../../shared/enums";
+@@ -107,6 +109,20 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
+ 		const isFlutter = debuggerType === DebuggerType.Flutter || debuggerType === DebuggerType.FlutterTest;
+ 		const isIntegrationTest = debugConfig.program && isInsideFolderNamed(debugConfig.program, "integration_test");
+ 
++		const isDartNative = this.wsContext.hasAnyDartNativeProjects
++			|| (projectRoot && isDartNativeProjectFolder(projectRoot))
++			|| (debugConfig.cwd && isDartNativeProjectFolder(debugConfig.cwd))
++			|| (folder && isDartNativeProjectFolder(fsPath(folder.uri)));
++
++		if (isDartNative) {
++			const dnBinary = this.wsContext.sdks.flutter ? path.join(this.wsContext.sdks.flutter, "bin", executableNames.dn) : undefined;
++			if (!dnBinary || !fs.existsSync(dnBinary)) {
++				this.logger.warn("DartNative binary ('dn') not found when attempting to start debug session");
++				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to run or debug this project.");
++				return undefined;
++			}
++		}
++
+ 		// Handle detecting a Flutter app, but the extension has loaded in Dart-only mode.
+ 		if (isFlutter && !this.wsContext.hasAnyFlutterProjects) {
+ 			this.logger.warn("Tried to launch Flutter project in non-Flutter workspace");
+@@ -599,8 +615,12 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
+ 	private async setupDebugConfig(folder: WorkspaceFolder | undefined, debugConfig: DartVsCodeLaunchArgs, debuggerType: DebuggerType, isFlutter: boolean, isAttach: boolean, isTest: boolean, device: Device | undefined, deviceManager: FlutterDeviceManager | undefined): Promise<void> {
+ 		const conf = config.for(folder?.uri);
+ 
++		const isDartNative = this.wsContext.hasAnyDartNativeProjects
++			|| (debugConfig.cwd && isDartNativeProjectFolder(debugConfig.cwd))
++			|| (folder && isDartNativeProjectFolder(fsPath(folder.uri)));
++
+ 		if (!debugConfig.name)
+-			debugConfig.name = isFlutter ? "Flutter" : "Dart";
++			debugConfig.name = isDartNative ? "DartNative" : isFlutter ? "Flutter" : "Dart";
+ 
+ 		if (isFlutter && device) {
+ 			const deviceLabel = deviceManager ? deviceManager.labelForDevice(device) : device.name;
+@@ -692,6 +712,13 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
  				break;
  		}
  
-+		const licenseKey = config.dartNativeLicenseKey?.trim();
-+		if (licenseKey && !args.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
-+			args.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
++		if (debuggerType === DebuggerType.Flutter) {
++			const licenseKey = config.dartNativeLicenseKey?.trim();
++			if (licenseKey && !args.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
++				args.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
++			}
 +		}
 +
  		return args;
  	}
  
-@@ -731,8 +736,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
+@@ -731,8 +758,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
  		const isDebug = debugConfig.noDebug !== true;
  		const isAttach = debugConfig.request === "attach";
  		const isWeb = isWebDevice(debugConfig.deviceId);
@@ -1460,7 +2583,7 @@ index 280fe788..e2f31549 100644
  		this.addArgsIfNotExist(args, ...conf.flutterAdditionalArgs);
  		if (isAttach)
  			this.addArgsIfNotExist(args, ...conf.flutterAttachAdditionalArgs);
-@@ -804,8 +812,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
+@@ -804,8 +834,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
  
  	protected buildFlutterTestToolArgs(debugConfig: DartVsCodeLaunchArgs, conf: ResourceConfig): string[] {
  		const args: string[] = [];
@@ -1553,6 +2676,102 @@ index d2813240..3ed290f6 100644
  			return;
  
  		const line = document.lineAt(position.line).text.slice(0, position.character);
+diff --git a/src/extension/providers/widget_code_action_provider.ts b/src/extension/providers/widget_code_action_provider.ts
+new file mode 100644
+index 00000000..6c9800d8
+--- /dev/null
++++ b/src/extension/providers/widget_code_action_provider.ts
+@@ -0,0 +1,90 @@
++import * as vs from "vscode";
++import { config } from "../config";
++import { getAvailableRefactorActions } from "../refactors/widget_refactor_core";
++import { isInsideDartNativeProject, isInsideFlutterProject } from "../utils";
++
++export class WidgetCodeActionProvider implements vs.CodeActionProvider {
++	public static readonly providedCodeActionKinds = [
++		vs.CodeActionKind.Refactor,
++		vs.CodeActionKind.RefactorExtract,
++		vs.CodeActionKind.RefactorRewrite,
++		vs.CodeActionKind.QuickFix,
++	];
++
++	public provideCodeActions(
++		document: vs.TextDocument,
++		range: vs.Range | vs.Selection,
++		context: vs.CodeActionContext,
++		_token: vs.CancellationToken,
++	): vs.CodeAction[] | undefined {
++		if (!config.enableWidgetRefactors) {
++			return undefined;
++		}
++
++		// Only run for Dart documents in Flutter or DartNative projects or files containing widgets
++		const isProjectMatch = isInsideDartNativeProject(document.uri) || isInsideFlutterProject(document.uri);
++		const code = document.getText();
++		if (!isProjectMatch && !code.includes("Widget") && !code.includes("State<") && !code.includes("dartnative") && !code.includes("flutter")) {
++			return undefined;
++		}
++
++		const selectionStart = document.offsetAt(range.start);
++		const selectionEnd = document.offsetAt(range.end);
++
++		const actions = getAvailableRefactorActions(code, selectionStart, selectionEnd, {
++			moveNonFinalFieldsToState: config.moveNonFinalFieldsToState,
++		});
++		if (!actions || actions.length === 0) {
++			return undefined;
++		}
++
++		const isQuickFixRequested = !!context?.only?.contains(vs.CodeActionKind.QuickFix);
++
++		return actions.map((action) => {
++			if (action.id === "dart.refactor.extractWidget" || action.kind === "refactor.extract") {
++				const caKind = isQuickFixRequested ? vs.CodeActionKind.QuickFix : vs.CodeActionKind.RefactorExtract;
++				const ca = new vs.CodeAction(action.title, caKind);
++				ca.command = {
++					arguments: [document, action.replaceRange],
++					command: "dart.refactor.extractWidget",
++					title: action.title,
++				};
++				return ca;
++			}
++
++			let kind = action.kind === "refactor.rewrite"
++				? vs.CodeActionKind.RefactorRewrite
++				: vs.CodeActionKind.Refactor;
++			if (isQuickFixRequested) {
++				kind = vs.CodeActionKind.QuickFix;
++			}
++			const ca = new vs.CodeAction(action.title, kind);
++			const edit = new vs.WorkspaceEdit();
++			const startPos = document.positionAt(action.replaceRange.start);
++			const endPos = document.positionAt(action.replaceRange.end);
++			const editRange = new vs.Range(startPos, endPos);
++
++			if (action.snippetText) {
++				const snippetEdit = new vs.SnippetTextEdit(editRange, new vs.SnippetString(action.snippetText));
++				snippetEdit.keepWhitespace = true;
++				edit.set(document.uri, [snippetEdit]);
++			} else {
++				edit.replace(document.uri, editRange, action.newText);
++			}
++
++			if (action.appendText) {
++				const endOfDoc = document.positionAt(code.length);
++				edit.insert(document.uri, endOfDoc, action.appendText);
++			}
++
++			ca.edit = edit;
++			if (config.formatAfterRefactoring) {
++				ca.command = {
++					command: "_dart.formatDocument",
++					title: "Format Document",
++				};
++			}
++			return ca;
++		});
++	}
++}
 diff --git a/src/extension/recommendations/recommendations.ts b/src/extension/recommendations/recommendations.ts
 index de7ec195..10da17fe 100644
 --- a/src/extension/recommendations/recommendations.ts
@@ -1586,6 +2805,1587 @@ index de7ec195..10da17fe 100644
  		return false;
  	}
  
+diff --git a/src/extension/refactors/widget_refactor_core.ts b/src/extension/refactors/widget_refactor_core.ts
+new file mode 100644
+index 00000000..87edb830
+--- /dev/null
++++ b/src/extension/refactors/widget_refactor_core.ts
+@@ -0,0 +1,1575 @@
++/**
++ * Pure Dart AST/token scanner and widget refactoring engine.
++ * Decoupled from VS Code APIs to allow sub-millisecond unit testing.
++ */
++
++export interface TextRange {
++	start: number;
++	end: number;
++}
++
++export interface RefactorAction {
++	id: string;
++	title: string;
++	kind: string;
++	replaceRange: TextRange;
++	newText: string;
++	snippetText?: string;
++	appendText?: string;
++	isMultiWidget?: boolean;
++}
++
++/**
++ * Tokenizes and scans Dart code, handling strings, raw strings, and comments.
++ */
++export class DartCodeScanner {
++	constructor(public readonly code: string) {}
++
++	/**
++	 * Skips comments and strings starting from index, returning next non-comment/string index.
++	 */
++	public skipTrivia(fromIndex: number): number {
++		let i = fromIndex;
++		const len = this.code.length;
++
++		while (i < len) {
++			const char = this.code[i];
++			const next = i + 1 < len ? this.code[i + 1] : "";
++
++			// Whitespace
++			if (char === " " || char === "\t" || char === "\n" || char === "\r") {
++				i++;
++				continue;
++			}
++
++			// Single line comment
++			if (char === "/" && next === "/") {
++				i += 2;
++				while (i < len && this.code[i] !== "\n") {
++					i++;
++				}
++				continue;
++			}
++
++			// Block comment
++			if (char === "/" && next === "*") {
++				i += 2;
++				while (i < len && !(this.code[i] === "*" && i + 1 < len && this.code[i + 1] === "/")) {
++					i++;
++				}
++				i = Math.min(len, i + 2);
++				continue;
++			}
++
++			break;
++		}
++
++		return i;
++	}
++
++	/**
++	 * Scans forward from an opening bracket '(', '[', or '{' and returns matching close index.
++	 */
++	public findMatchingBracket(openIndex: number): number {
++		const openChar = this.code[openIndex];
++		const closeChar = openChar === "(" ? ")" : openChar === "[" ? "]" : openChar === "{" ? "}" : "";
++		if (!closeChar) return -1;
++
++		let depth = 1;
++		let i = openIndex + 1;
++		const len = this.code.length;
++
++		while (i < len && depth > 0) {
++			const char = this.code[i];
++			const next = i + 1 < len ? this.code[i + 1] : "";
++
++			// Skip single-line comments
++			if (char === "/" && next === "/") {
++				i += 2;
++				while (i < len && this.code[i] !== "\n") {
++					i++;
++				}
++				continue;
++			}
++
++			// Skip block comments
++			if (char === "/" && next === "*") {
++				i += 2;
++				while (i < len && !(this.code[i] === "*" && i + 1 < len && this.code[i + 1] === "/")) {
++					i++;
++				}
++				i = Math.min(len, i + 2);
++				continue;
++			}
++
++			// Skip raw strings: r'...' or r"..."
++			if (char === "r" && (next === "'" || next === "\"")) {
++				const quote = next;
++				const isTriple = i + 3 < len && this.code.substring(i + 1, i + 4) === quote.repeat(3);
++				if (isTriple) {
++					const target = quote.repeat(3);
++					i += 4;
++					while (i <= len - 3 && this.code.substring(i, i + 3) !== target) {
++						i++;
++					}
++					i = Math.min(len, i + 3);
++				} else {
++					i += 2;
++					while (i < len && this.code[i] !== quote) {
++						i++;
++					}
++					i = Math.min(len, i + 1);
++				}
++				continue;
++			}
++
++			// Skip normal strings: '...', "...", '''...''', """..."""
++			if (char === "'" || char === "\"") {
++				const quote = char;
++				const isTriple = i + 2 < len && this.code.substring(i, i + 3) === quote.repeat(3);
++				if (isTriple) {
++					const target = quote.repeat(3);
++					i += 3;
++					while (i <= len - 3) {
++						if (this.code[i] === "\\") {
++							i += 2;
++						} else if (this.code.substring(i, i + 3) === target) {
++							i += 3;
++							break;
++						} else {
++							i++;
++						}
++					}
++				} else {
++					i += 1;
++					while (i < len) {
++						if (this.code[i] === "\\") {
++							i += 2;
++						} else if (this.code[i] === quote) {
++							i++;
++							break;
++						} else if (this.code[i] === "\n") {
++							// unterminated single-line string
++							break;
++						} else {
++							i++;
++						}
++					}
++				}
++				continue;
++			}
++
++			// Track depth
++			if (char === openChar) {
++				depth++;
++			} else if (char === closeChar) {
++				depth--;
++				if (depth === 0) return i;
++			}
++
++			i++;
++		}
++
++		return -1;
++	}
++
++	/**
++	 * Finds all widget constructor calls in the code.
++	 * Returns array of { start, end, name, argsStart, argsEnd }
++	 */
++	public findAllWidgetExpressions(): Array<{ start: number; end: number; name: string; argsStart: number; argsEnd: number }> {
++		const widgets: Array<{ start: number; end: number; name: string; argsStart: number; argsEnd: number }> = [];
++		// Pattern for Identifier or Identifier.namedConstructor preceded optionally by const / new
++		const pattern = /\b(?:const\s+|new\s+)?([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*|\.[a-z][A-Za-z0-9_]*)?)\s*\(/g;
++		let match: RegExpExecArray | null;
++
++		while ((match = pattern.exec(this.code)) !== null) {
++			const start = match.index;
++			const name = match[1];
++			const openParenIndex = this.code.indexOf("(", start + match[0].length - 1);
++			if (openParenIndex === -1) continue;
++
++			const closeParenIndex = this.findMatchingBracket(openParenIndex);
++			if (closeParenIndex !== -1) {
++				widgets.push({
++					argsEnd: closeParenIndex,
++					argsStart: openParenIndex + 1,
++					end: closeParenIndex + 1,
++					name,
++					start,
++				});
++			}
++		}
++
++		return widgets;
++	}
++
++	/**
++	 * Finds the smallest enclosing widget call surrounding the given offset.
++	 */
++	public findEnclosingWidget(offset: number): { start: number; end: number; name: string; argsStart: number; argsEnd: number } | undefined {
++		const allWidgets = this.findAllWidgetExpressions();
++		let innermost: { start: number; end: number; name: string; argsStart: number; argsEnd: number } | undefined;
++
++		for (const w of allWidgets) {
++			if (offset >= w.start && offset <= w.end) {
++				if (!innermost || (w.end - w.start < innermost.end - innermost.start)) {
++					innermost = w;
++				}
++			}
++		}
++
++		return innermost;
++	}
++
++	/**
++	 * Finds items inside a `children: [...]` list that are selected.
++	 */
++	public findSelectedWidgetsInList(selectionStart: number, selectionEnd: number): Array<{ start: number; end: number; text: string }> {
++		if (selectionStart >= selectionEnd) return [];
++
++		// Find list literals `children: [...]` or `[...]`
++		const listPattern = /\bchildren\s*:\s*\[/g;
++		let match: RegExpExecArray | null;
++
++		while ((match = listPattern.exec(this.code)) !== null) {
++			const openBracket = this.code.indexOf("[", match.index);
++			if (openBracket === -1) continue;
++			const closeBracket = this.findMatchingBracket(openBracket);
++			if (closeBracket === -1) continue;
++
++			// Check if selection intersects this children list
++			if (selectionStart >= openBracket && selectionEnd <= closeBracket) {
++				// Parse items inside this list
++				const items = this.parseListItems(openBracket + 1, closeBracket);
++				const selected = items.filter((item) => !(item.end < selectionStart || item.start > selectionEnd));
++
++				if (selected.length > 1) {
++					return selected;
++				}
++			}
++		}
++
++		return [];
++	}
++
++	/**
++	 * Parses comma-separated top-level expressions inside a list `[ item1, item2, ... ]`.
++	 */
++	public parseListItems(fromIndex: number, toIndex: number): Array<{ start: number; end: number; text: string }> {
++		const items: Array<{ start: number; end: number; text: string }> = [];
++		let currentStart = -1;
++		let i = fromIndex;
++
++		let parenDepth = 0;
++		let bracketDepth = 0;
++		let braceDepth = 0;
++
++		while (i < toIndex) {
++			const char = this.code[i];
++			const next = i + 1 < toIndex ? this.code[i + 1] : "";
++
++			// Skip comments
++			if (char === "/" && next === "/") {
++				i += 2;
++				while (i < toIndex && this.code[i] !== "\n") i++;
++				continue;
++			}
++			if (char === "/" && next === "*") {
++				i += 2;
++				while (i < toIndex && !(this.code[i] === "*" && i + 1 < toIndex && this.code[i + 1] === "/")) i++;
++				i = Math.min(toIndex, i + 2);
++				continue;
++			}
++
++			// Skip strings
++			if (char === "'" || char === "\"") {
++				const quote = char;
++				i++;
++				while (i < toIndex) {
++					if (this.code[i] === "\\") {
++						i += 2;
++					} else if (this.code[i] === quote) {
++						i++;
++						break;
++					} else {
++						i++;
++					}
++				}
++				continue;
++			}
++
++			if (char === "(") parenDepth++;
++			else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
++			else if (char === "[") bracketDepth++;
++			else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
++			else if (char === "{") braceDepth++;
++			else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
++
++			// Track item boundaries
++			if (parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
++				if (char === ",") {
++					if (currentStart !== -1) {
++						const rawItem = this.code.substring(currentStart, i).trim();
++						if (rawItem.length > 0) {
++							// Exact trimmed start and end
++							const actualStart = this.code.indexOf(rawItem, currentStart);
++							items.push({
++								end: actualStart + rawItem.length,
++								start: actualStart,
++								text: rawItem,
++							});
++						}
++						currentStart = -1;
++					}
++				} else if (char !== " " && char !== "\t" && char !== "\n" && char !== "\r") {
++					if (currentStart === -1) {
++						currentStart = i;
++					}
++				}
++			}
++
++			i++;
++		}
++
++		if (currentStart !== -1) {
++			const rawItem = this.code.substring(currentStart, toIndex).trim();
++			if (rawItem.length > 0) {
++				const actualStart = this.code.indexOf(rawItem, currentStart);
++				items.push({
++					end: actualStart + rawItem.length,
++					start: actualStart,
++					text: rawItem,
++				});
++			}
++		}
++
++		return items;
++	}
++
++	/**
++	 * Finds the `child:` argument expression inside a widget's arguments.
++	 */
++	public findChildExpression(argsStart: number, argsEnd: number): { start: number; end: number; text: string } | undefined {
++		const argsCode = this.code.substring(argsStart, argsEnd);
++		const childMatch = /\bchild\s*:\s*/g;
++		let match: RegExpExecArray | null;
++
++		while ((match = childMatch.exec(argsCode)) !== null) {
++			const childValStart = argsStart + match.index + match[0].length;
++			// Find end of this expression (up to next unnested comma or end of args)
++			let i = childValStart;
++			let parenDepth = 0;
++			let bracketDepth = 0;
++			let braceDepth = 0;
++
++			while (i < argsEnd) {
++				const char = this.code[i];
++				const next = i + 1 < argsEnd ? this.code[i + 1] : "";
++
++				if (char === "/" && next === "/") {
++					i += 2;
++					while (i < argsEnd && this.code[i] !== "\n") i++;
++					continue;
++				}
++				if (char === "'" || char === "\"") {
++					const quote = char;
++					i++;
++					while (i < argsEnd) {
++						if (this.code[i] === "\\") {
++							i += 2;
++						} else if (this.code[i] === quote) {
++							i++;
++							break;
++						} else {
++							i++;
++						}
++					}
++					continue;
++				}
++
++				if (char === "(") parenDepth++;
++				else if (char === ")") {
++					if (parenDepth === 0) break;
++					parenDepth--;
++				} else if (char === "[") bracketDepth++;
++				else if (char === "]") bracketDepth--;
++				else if (char === "{") braceDepth++;
++				else if (char === "}") braceDepth--;
++
++				if (parenDepth === 0 && bracketDepth === 0 && braceDepth === 0 && char === ",") {
++					break;
++				}
++				i++;
++			}
++
++			const raw = this.code.substring(childValStart, i).trim();
++			if (raw.length > 0) {
++				const actualStart = this.code.indexOf(raw, childValStart);
++				return {
++					end: actualStart + raw.length,
++					start: actualStart,
++					text: raw,
++				};
++			}
++		}
++
++		return undefined;
++	}
++}
++
++/**
++ * Helper to compute indentation of a given offset in the source code.
++ */
++export function getLineIndentation(code: string, offset: number): string {
++	let lineStart = offset;
++	while (lineStart > 0 && code[lineStart - 1] !== "\n") {
++		lineStart--;
++	}
++	let i = lineStart;
++	while (i < code.length && (code[i] === " " || code[i] === "\t")) {
++		i++;
++	}
++	return code.substring(lineStart, i);
++}
++
++export function escapeSnippet(text: string): string {
++	return text.replace(/[$}\\]/g, "\\$&");
++}
++
++/**
++ * Generates single-widget wrap code.
++ */
++export function generateSingleWidgetWrap(
++	code: string,
++	target: { start: number; end: number },
++	wrapperKind: "Padding" | "Container" | "Center" | "SizedBox" | "Expanded" | "Column" | "Row" | "widget",
++): string {
++	const widgetText = code.substring(target.start, target.end);
++	const indent = getLineIndentation(code, target.start);
++	const childIndent = indent + "  ";
++
++	const indentedChild = widgetText.split("\n").map((line, idx) => {
++		if (idx === 0) return line;
++		return "  " + line;
++	}).join("\n");
++
++	switch (wrapperKind) {
++		case "Padding":
++			return `Padding(\n${childIndent}padding: const EdgeInsets.all(8.0),\n${childIndent}child: ${indentedChild},\n${indent})`;
++		case "Container":
++			return `Container(\n${childIndent}child: ${indentedChild},\n${indent})`;
++		case "Center":
++			return `Center(\n${childIndent}child: ${indentedChild},\n${indent})`;
++		case "SizedBox":
++			return `SizedBox(\n${childIndent}child: ${indentedChild},\n${indent})`;
++		case "Expanded":
++			return `Expanded(\n${childIndent}child: ${indentedChild},\n${indent})`;
++		case "Column":
++			return `Column(\n${childIndent}children: [\n${childIndent}  ${indentedChild},\n${childIndent}],\n${indent})`;
++		case "Row":
++			return `Row(\n${childIndent}children: [\n${childIndent}  ${indentedChild},\n${childIndent}],\n${indent})`;
++		case "widget":
++			return `widget(\n${childIndent}child: ${indentedChild},\n${indent})`;
++	}
++}
++
++/**
++ * Generates single-widget wrap snippet code with tabstops/placeholders.
++ */
++export function generateSingleWidgetWrapSnippet(
++	code: string,
++	target: { start: number; end: number },
++	wrapperKind: "Padding" | "Container" | "Center" | "SizedBox" | "Expanded" | "Column" | "Row" | "widget",
++): string {
++	const widgetText = code.substring(target.start, target.end);
++	const indent = getLineIndentation(code, target.start);
++	const childIndent = indent + "  ";
++
++	const indentedChild = widgetText.split("\n").map((line, idx) => {
++		if (idx === 0) return line;
++		return "  " + line;
++	}).join("\n");
++
++	const escapedChild = escapeSnippet(indentedChild);
++
++	switch (wrapperKind) {
++		case "widget":
++			return `\${1:widget}(\n${childIndent}child: ${escapedChild},\n${indent})`;
++		default:
++			return generateSingleWidgetWrap(code, target, wrapperKind);
++	}
++}
++
++/**
++ * Generates multi-widget wrap code (Column or Row) for selected sibling widgets.
++ */
++export function generateMultiWidgetWrap(
++	code: string,
++	items: Array<{ start: number; end: number; text: string }>,
++	wrapperKind: "Column" | "Row",
++): { replaceRange: TextRange; newText: string } {
++	const firstItem = items[0];
++	const lastItem = items[items.length - 1];
++	const replaceRange: TextRange = { start: firstItem.start, end: lastItem.end };
++
++	const baseIndent = getLineIndentation(code, firstItem.start);
++	const childrenIndent = baseIndent + "  ";
++	const extraIndent = "    ";
++
++	const formattedItems = items.map((item) => {
++		const itemLines = item.text.split("\n");
++		const originalItemIndent = getLineIndentation(code, item.start);
++		const formattedLines = itemLines.map((line, idx) => {
++			if (idx === 0) {
++				return baseIndent + extraIndent + line.trimStart();
++			}
++			if (line.trim().length === 0) {
++				return "";
++			}
++			if (line.startsWith(originalItemIndent)) {
++				return baseIndent + extraIndent + line.substring(originalItemIndent.length);
++			}
++			return baseIndent + extraIndent + line;
++		});
++		return formattedLines.join("\n") + ",";
++	}).join("\n");
++
++	const newText = `${wrapperKind}(\n${childrenIndent}children: [\n${formattedItems}\n${childrenIndent}],\n${baseIndent})`;
++	return { newText, replaceRange };
++}
++
++/**
++ * Generates code to remove a widget.
++ * If the widget has a child, it un-nests the child into the widget's place.
++ * If the widget is in a list with no child, removes it.
++ */
++export function generateRemoveWidget(
++	code: string,
++	target: { start: number; end: number; argsStart: number; argsEnd: number },
++): { replaceRange: TextRange; newText: string } {
++	const scanner = new DartCodeScanner(code);
++	const childExpr = scanner.findChildExpression(target.argsStart, target.argsEnd);
++
++	if (childExpr) {
++		// Replace widget with its child expression
++		const childText = code.substring(childExpr.start, childExpr.end);
++		return {
++			newText: childText,
++			replaceRange: { start: target.start, end: target.end },
++		};
++	}
++
++	// Leaf widget without child: check if it has a trailing comma in a list
++	let end = target.end;
++	while (end < code.length && (code[end] === " " || code[end] === "\t")) {
++		end++;
++	}
++	if (end < code.length && code[end] === ",") {
++		end++;
++	}
++
++	let start = target.start;
++	// Clean up leading whitespace/newline if entire line
++	while (start > 0 && (code[start - 1] === " " || code[start - 1] === "\t")) {
++		start--;
++	}
++	if (start > 0 && code[start - 1] === "\n") {
++		start--;
++	}
++
++	return {
++		newText: "",
++		replaceRange: { start, end },
++	};
++}
++
++/**
++ * Generates code to remove multiple widgets from a list.
++ */
++export function generateRemoveMultiWidgets(
++	code: string,
++	items: Array<{ start: number; end: number; text: string }>,
++): { replaceRange: TextRange; newText: string } {
++	const firstItem = items[0];
++	const lastItem = items[items.length - 1];
++
++	let start = firstItem.start;
++	while (start > 0 && (code[start - 1] === " " || code[start - 1] === "\t")) {
++		start--;
++	}
++	if (start > 0 && code[start - 1] === "\n") {
++		start--;
++	}
++
++	let end = lastItem.end;
++	while (end < code.length && (code[end] === " " || code[end] === "\t")) {
++		end++;
++	}
++	if (end < code.length && code[end] === ",") {
++		end++;
++	}
++
++	return {
++		newText: "",
++		replaceRange: { start, end },
++	};
++}
++
++export interface WidgetRefactorOptions {
++	moveNonFinalFieldsToState?: boolean;
++}
++
++/**
++ * Computes all available refactoring actions for a cursor position or selection range.
++ */
++export function getAvailableRefactorActions(
++	code: string,
++	selectionStart: number,
++	selectionEnd: number = selectionStart,
++	options: WidgetRefactorOptions = {},
++): RefactorAction[] {
++	const scanner = new DartCodeScanner(code);
++	const actions: RefactorAction[] = [];
++
++	// RULE 1: Check for Multi-Widget Selection inside `children: [...]`
++	if (selectionStart < selectionEnd) {
++		const selectedListItems = scanner.findSelectedWidgetsInList(selectionStart, selectionEnd);
++		if (selectedListItems.length > 1) {
++			// Multi-widget selection: ONLY return Wrap with Row, Wrap with Column, and Remove widgets
++			const wrapCol = generateMultiWidgetWrap(code, selectedListItems, "Column");
++			actions.push({
++				id: "dart.refactor.wrapWithColumn.multi",
++				isMultiWidget: true,
++				kind: "refactor.rewrite",
++				newText: wrapCol.newText,
++				replaceRange: wrapCol.replaceRange,
++				title: "Wrap with Column",
++			});
++
++			const wrapRow = generateMultiWidgetWrap(code, selectedListItems, "Row");
++			actions.push({
++				id: "dart.refactor.wrapWithRow.multi",
++				isMultiWidget: true,
++				kind: "refactor.rewrite",
++				newText: wrapRow.newText,
++				replaceRange: wrapRow.replaceRange,
++				title: "Wrap with Row",
++			});
++
++			const removeWidgets = generateRemoveMultiWidgets(code, selectedListItems);
++			actions.push({
++				id: "dart.refactor.removeWidgets",
++				isMultiWidget: true,
++				kind: "refactor.rewrite",
++				newText: removeWidgets.newText,
++				replaceRange: removeWidgets.replaceRange,
++				title: "Remove widgets",
++			});
++
++			return actions;
++		}
++	}
++
++	// RULE 2: Check if cursor is on Class Declaration Header
++	const classHeader = findClassDeclarationHeader(code, selectionStart);
++	if (classHeader) {
++		if (classHeader.kind === "StatelessWidget") {
++			const converted = convertStatelessToStateful(code, classHeader, options);
++			actions.push({
++				id: "dart.refactor.convertToStatefulWidget",
++				kind: "refactor.rewrite",
++				newText: converted.newText,
++				replaceRange: converted.replaceRange,
++				title: "Convert to StatefulWidget",
++			});
++			return actions;
++		} else if (classHeader.kind === "StatefulWidget" || classHeader.kind === "State") {
++			const converted = convertStatefulToStateless(code, classHeader, options);
++			actions.push({
++				id: "dart.refactor.convertToStatelessWidget",
++				kind: "refactor.rewrite",
++				newText: converted.newText,
++				replaceRange: converted.replaceRange,
++				title: "Convert to StatelessWidget",
++			});
++			return actions;
++		}
++	}
++
++	// RULE 3: Single Widget Selection / Cursor Placement
++	const targetWidget = scanner.findEnclosingWidget(selectionStart);
++	if (!targetWidget) return actions;
++
++	const targetRange: TextRange = { start: targetWidget.start, end: targetWidget.end };
++
++	// 1. Wrap with widget...
++	actions.push({
++		id: "dart.refactor.wrapWithWidget",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "widget"),
++		replaceRange: targetRange,
++		snippetText: generateSingleWidgetWrapSnippet(code, targetRange, "widget"),
++		title: "Wrap with widget...",
++	});
++
++	// 2. Wrap with Padding
++	actions.push({
++		id: "dart.refactor.wrapWithPadding",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "Padding"),
++		replaceRange: targetRange,
++		title: "Wrap with Padding",
++	});
++
++	// 3. Wrap with Center
++	actions.push({
++		id: "dart.refactor.wrapWithCenter",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "Center"),
++		replaceRange: targetRange,
++		title: "Wrap with Center",
++	});
++
++	// 4. Wrap with Container
++	actions.push({
++		id: "dart.refactor.wrapWithContainer",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "Container"),
++		replaceRange: targetRange,
++		title: "Wrap with Container",
++	});
++
++	// 5. Wrap with Column
++	actions.push({
++		id: "dart.refactor.wrapWithColumn",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "Column"),
++		replaceRange: targetRange,
++		title: "Wrap with Column",
++	});
++
++	// 6. Wrap with Row
++	actions.push({
++		id: "dart.refactor.wrapWithRow",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "Row"),
++		replaceRange: targetRange,
++		title: "Wrap with Row",
++	});
++
++	// 7. Wrap with SizedBox
++	actions.push({
++		id: "dart.refactor.wrapWithSizedBox",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "SizedBox"),
++		replaceRange: targetRange,
++		title: "Wrap with SizedBox",
++	});
++
++	// 8. Wrap with Expanded
++	actions.push({
++		id: "dart.refactor.wrapWithExpanded",
++		kind: "refactor.rewrite",
++		newText: generateSingleWidgetWrap(code, targetRange, "Expanded"),
++		replaceRange: targetRange,
++		title: "Wrap with Expanded",
++	});
++
++	// 9. Remove this widget
++	const remove = generateRemoveWidget(code, targetWidget);
++	actions.push({
++		id: "dart.refactor.removeWidget",
++		kind: "refactor.rewrite",
++		newText: remove.newText,
++		replaceRange: remove.replaceRange,
++		title: "Remove this widget",
++	});
++
++	// 10. Extract Widget
++	const extracted = generateExtractWidget(code, targetRange, "NewWidget");
++	actions.push({
++		appendText: extracted.appendText,
++		id: "dart.refactor.extractWidget",
++		kind: "refactor.extract",
++		newText: extracted.usageText,
++		replaceRange: targetRange,
++		title: "Extract Widget",
++	});
++
++	return actions;
++}
++
++const DART_RESERVED_WORDS = new Set([
++	"abstract", "as", "assert", "async", "await", "break", "case", "catch",
++	"class", "const", "continue", "covariant", "default", "deferred", "do",
++	"dynamic", "else", "enum", "export", "extends", "extension", "external",
++	"factory", "false", "final", "finally", "for", "Function", "get", "hide",
++	"if", "implements", "import", "in", "interface", "is", "late", "library",
++	"mixin", "new", "null", "of", "on", "operator", "part", "required", "rethrow",
++	"return", "set", "show", "static", "super", "switch", "sync", "this",
++	"throw", "true", "try", "typedef", "var", "void", "while", "with", "yield",
++	"context",
++]);
++
++export interface ExtractedVariable {
++	name: string;
++	type: string;
++}
++
++/**
++ * Scans a widget code snippet for locally declared identifiers (e.g. closure/builder parameters, local vars, for loops).
++ */
++export function findLocallyDeclaredVariables(widgetCode: string): Set<string> {
++	const localVars = new Set<string>();
++	const cleanCode = stripComments(widgetCode);
++
++	// 1. Match closure / builder parameter lists: `(context, index) =>` or `(context, index) {` or `(int index) {`
++	const closureRegex = /\(([^()]*)\)\s*(?:=>|\{)/g;
++	let match: RegExpExecArray | null;
++	while ((match = closureRegex.exec(cleanCode)) !== null) {
++		const paramListStr = match[1].trim();
++		if (!paramListStr) continue;
++
++		// Split parameters by comma
++		const params = paramListStr.split(",");
++		for (const rawParam of params) {
++			const param = rawParam.trim().replace(/^[{}[\]]+|[{}[\]]+$/g, "").trim();
++			if (!param) continue;
++
++			// Handle default values: `int count = 0` -> `int count`
++			const withoutDefault = param.split("=")[0].trim();
++			// Get the last identifier in parameter signature: `BuildContext context` -> `context`, `final index` -> `index`
++			const identMatch = /\b([a-z_][a-zA-Z0-9_]*)\b$/.exec(withoutDefault);
++			if (identMatch) {
++				const varName = identMatch[1];
++				if (!DART_RESERVED_WORDS.has(varName)) {
++					localVars.add(varName);
++				}
++			}
++		}
++	}
++
++	// 2. Match local variable declarations: `var x =`, `final x =`, `final int x =`
++	const declRegex = /\b(?:var|final|late|const)\s+(?:[A-Za-z0-9_<>,?\s]+\s+)?([a-z_][a-zA-Z0-9_]*)\s*(?:=|;|\bin\b|,)/g;
++	while ((match = declRegex.exec(cleanCode)) !== null) {
++		const varName = match[1];
++		if (!DART_RESERVED_WORDS.has(varName)) {
++			localVars.add(varName);
++		}
++	}
++
++	// 3. Match `for (final item in items)` or `for (var i = 0; ...)`
++	const forRegex = /\bfor\s*\(\s*(?:var|final|[A-Z][a-zA-Z0-9_]*)\s+([a-z_][a-zA-Z0-9_]*)\s*(?:in|=)/g;
++	while ((match = forRegex.exec(cleanCode)) !== null) {
++		const varName = match[1];
++		if (!DART_RESERVED_WORDS.has(varName)) {
++			localVars.add(varName);
++		}
++	}
++
++	return localVars;
++}
++
++/**
++ * Extracts all free variable identifiers from a widget code snippet.
++ */
++export function extractFreeVariables(widgetCode: string): string[] {
++	const variables = new Set<string>();
++	const locallyDeclared = findLocallyDeclaredVariables(widgetCode);
++	const identRegex = /\b[a-z_][a-zA-Z0-9_]*\b/g;
++	let match: RegExpExecArray | null;
++
++	while ((match = identRegex.exec(widgetCode)) !== null) {
++		const name = match[0];
++		const index = match.index;
++
++		if (DART_RESERVED_WORDS.has(name)) continue;
++		if (locallyDeclared.has(name)) continue;
++
++		// Check if preceded by a dot: `object.property` -> property is not free
++		let prevIndex = index - 1;
++		while (prevIndex >= 0 && (widgetCode[prevIndex] === " " || widgetCode[prevIndex] === "\t")) {
++			prevIndex--;
++		}
++		if (prevIndex >= 0 && widgetCode[prevIndex] === ".") continue;
++
++		// Check if it's a named parameter label: `label: value`
++		let nextIndex = index + name.length;
++		while (nextIndex < widgetCode.length && (widgetCode[nextIndex] === " " || widgetCode[nextIndex] === "\t")) {
++			nextIndex++;
++		}
++		if (nextIndex < widgetCode.length && widgetCode[nextIndex] === ":") {
++			if (prevIndex >= 0 && (widgetCode[prevIndex] === "(" || widgetCode[prevIndex] === "," || widgetCode[prevIndex] === "\n")) {
++				continue;
++			}
++		}
++
++		variables.add(name);
++	}
++
++	return Array.from(variables);
++}
++
++/**
++ * Replaces comments in Dart code with spaces to preserve character offsets and line counts.
++ */
++export function stripComments(code: string): string {
++	let result = "";
++	let i = 0;
++	const len = code.length;
++
++	while (i < len) {
++		const char = code[i];
++		const next = i + 1 < len ? code[i + 1] : "";
++
++		// Single line comment
++		if (char === "/" && next === "/") {
++			while (i < len && code[i] !== "\n") {
++				result += " ";
++				i++;
++			}
++			continue;
++		}
++
++		// Block comment
++		if (char === "/" && next === "*") {
++			result += "  ";
++			i += 2;
++			while (i < len && !(code[i] === "*" && i + 1 < len && code[i + 1] === "/")) {
++				result += code[i] === "\n" ? "\n" : " ";
++				i++;
++			}
++			if (i < len) {
++				result += "  ";
++				i += 2;
++			}
++			continue;
++		}
++
++		// Normal/raw strings: keep them as is
++		if (char === "'" || char === "\"") {
++			const quote = char;
++			result += char;
++			i++;
++			while (i < len) {
++				if (code[i] === "\\") {
++					result += code[i] + (i + 1 < len ? code[i + 1] : "");
++					i += 2;
++				} else if (code[i] === quote) {
++					result += code[i];
++					i++;
++					break;
++				} else {
++					result += code[i];
++					i++;
++				}
++			}
++			continue;
++		}
++
++		result += char;
++		i++;
++	}
++
++	return result;
++}
++
++/**
++ * Parses a type signature at a given startIndex in comment-stripped code.
++ * Handles generic types with deep nesting, records, and nullable types:
++ * e.g. `CustomState<(String name, bool isSelected)>`, `CustomState<State<T>>`, `double`, `ThemeData?`
++ */
++export function extractTypeAt(code: string, startIndex: number): string | undefined {
++	let i = startIndex;
++	while (i < code.length && (code[i] === " " || code[i] === "\t" || code[i] === "\n" || code[i] === "\r")) {
++		i++;
++	}
++
++	if (i >= code.length) return undefined;
++
++	if (code.startsWith("const ", i)) {
++		i += 6;
++		while (i < code.length && (code[i] === " " || code[i] === "\t" || code[i] === "\n" || code[i] === "\r")) {
++			i++;
++		}
++	} else if (code.startsWith("new ", i)) {
++		i += 4;
++		while (i < code.length && (code[i] === " " || code[i] === "\t" || code[i] === "\n" || code[i] === "\r")) {
++			i++;
++		}
++	}
++
++	const identMatch = /[A-Za-z0-9_]+/y;
++	identMatch.lastIndex = i;
++	const match = identMatch.exec(code);
++	if (!match) return undefined;
++
++	let typeName = match[0];
++	i += typeName.length;
++
++	// Check for generic arguments `<...>`
++	if (i < code.length && code[i] === "<") {
++		let genericDepth = 0;
++		let parenDepth = 0;
++		let bracketDepth = 0;
++		let braceDepth = 0;
++		const genericStart = i;
++
++		while (i < code.length) {
++			const c = code[i];
++			if (c === "<") {
++				genericDepth++;
++			} else if (c === ">") {
++				genericDepth--;
++				if (genericDepth === 0) {
++					i++;
++					break;
++				}
++			} else if (c === "(") {
++				parenDepth++;
++			} else if (c === ")") {
++				parenDepth = Math.max(0, parenDepth - 1);
++			} else if (c === "[") {
++				bracketDepth++;
++			} else if (c === "]") {
++				bracketDepth = Math.max(0, bracketDepth - 1);
++			} else if (c === "{") {
++				braceDepth++;
++			} else if (c === "}") {
++				braceDepth = Math.max(0, braceDepth - 1);
++			} else if (c === ";" || (genericDepth === 0 && (c === "=" || c === "," || c === "\n"))) {
++				break;
++			}
++			i++;
++		}
++
++		if (genericDepth === 0) {
++			typeName += code.substring(genericStart, i);
++		}
++	}
++
++	// Check for nullable `?`
++	if (i < code.length && code[i] === "?") {
++		typeName += "?";
++	}
++
++	return typeName.trim();
++}
++
++/**
++ * Infers types of extracted variables by scanning enclosing scope or usage patterns.
++ */
++export function inferVariableTypes(fullCode: string, widgetStartOffset: number, variableNames: string[], widgetCode: string): ExtractedVariable[] {
++	const cleanScopeBefore = stripComments(fullCode.substring(0, widgetStartOffset));
++	const cleanFullCode = stripComments(fullCode);
++
++	return variableNames.map((name) => {
++		let foundType: string | undefined;
++
++		// 1. Check for `var name = Constructor<...>(...)` or `final name = Constructor<...>(...)`
++		const initRegex = new RegExp(`\\b(?:var|final|late)\\s+\\b${name}\\b\\s*=\\s*`, "g");
++		let match: RegExpExecArray | null;
++		while ((match = initRegex.exec(cleanScopeBefore)) !== null) {
++			const rhsStart = match.index + match[0].length;
++			const inferred = extractTypeAt(cleanScopeBefore, rhsStart);
++			if (inferred && inferred !== "var" && inferred !== "final" && inferred !== "late") {
++				foundType = inferred;
++			}
++		}
++
++		// 2. Check for explicit type declaration: `CustomType<...> name` or `final CustomType<...> name;`
++		if (!foundType) {
++			const declRegex = new RegExp(`\\b(?:final\\s+|const\\s+|late\\s+)?([A-Z][a-zA-Z0-9_]*)\\s*(?:<[^;=]+>)?\\s*\\??\\s+\\b${name}\\b\\s*(?:[;=,)]|$)`, "g");
++			while ((match = declRegex.exec(cleanScopeBefore)) !== null) {
++				const matchStr = match[0];
++				const typeOffsetInMatch = matchStr.search(/[A-Z]/);
++				if (typeOffsetInMatch !== -1) {
++					const typeStart = match.index + typeOffsetInMatch;
++					const inferred = extractTypeAt(cleanScopeBefore, typeStart);
++					if (inferred && inferred !== "final" && inferred !== "const" && inferred !== "late" && inferred !== "var") {
++						foundType = inferred;
++					}
++				}
++			}
++		}
++
++		// 3. Check for class methods / functions in the file: e.g. `Expanded expanded()` or `Widget expanded()` or `void handleTap()`
++		if (!foundType) {
++			const methodRegex = new RegExp(`\\b([A-Za-z0-9_]+)\\s*(?:<[^;{]+>)?\\s*\\??\\s+\\b${name}\\s*\\(`, "g");
++			while ((match = methodRegex.exec(cleanFullCode)) !== null) {
++				const retStart = match.index;
++				const retType = extractTypeAt(cleanFullCode, retStart);
++				if (retType && retType !== "if" && retType !== "while" && retType !== "switch") {
++					if (retType === "void") {
++						foundType = "VoidCallback";
++					} else {
++						foundType = `${retType} Function()`;
++					}
++				}
++			}
++		}
++
++		// 4. Check for `Theme.of(context)`
++		if (!foundType) {
++			const themeRegex = new RegExp(`\\b${name}\\s*=\\s*Theme\\.of\\b`);
++			if (themeRegex.test(cleanScopeBefore)) {
++				foundType = "ThemeData";
++			}
++		}
++
++		// 5. Infer from usage in widgetCode
++		if (!foundType) {
++			const callRegex = new RegExp(`\\b${name}\\s*\\(`);
++			if (callRegex.test(widgetCode)) {
++				foundType = "Widget Function()";
++			}
++		}
++
++		if (!foundType) {
++			const strCompareRegex = new RegExp(`\\b${name}\\s*(?:==|!=)\\s*['"]|['"]\\s*(?:==|!=)\\s*\\b${name}\\b`);
++			if (strCompareRegex.test(widgetCode)) {
++				foundType = "String";
++			}
++		}
++
++		if (!foundType) {
++			const numRegex = new RegExp(`\\b${name}\\s*[*+/-]\\s*\\d|\\b(?:width|height|size|radius|fontSize)\\s*:\\s*\\b${name}\\b`);
++			if (numRegex.test(widgetCode)) {
++				foundType = "double";
++			}
++		}
++
++		if (!foundType) {
++			const boolRegex = new RegExp(`\\b${name}\\s*\\?|\\b${name}\\s*&&|\\b${name}\\s*\\|\\|`);
++			if (boolRegex.test(widgetCode)) {
++				foundType = "bool";
++			}
++		}
++
++		if (!foundType) {
++			foundType = "dynamic";
++		}
++
++		return { name, type: foundType };
++	});
++}
++
++/**
++ * Generates Extract Widget transformation: the usage invocation and the new StatelessWidget class.
++ */
++export function generateExtractWidget(
++	fullCode: string,
++	targetRange: TextRange,
++	newWidgetName = "NewWidget",
++): { usageText: string; classText: string; fullEditedCode: string; replaceRange: TextRange; appendText: string } {
++	const widgetCode = fullCode.substring(targetRange.start, targetRange.end);
++	const varNames = extractFreeVariables(widgetCode);
++	const variables = inferVariableTypes(fullCode, targetRange.start, varNames, widgetCode);
++
++	let usageText: string;
++	if (variables.length > 0) {
++		const args = variables.map((v) => `${v.name}: ${v.name}`).join(", ");
++		usageText = `${newWidgetName}(${args})`;
++	} else {
++		usageText = `const ${newWidgetName}()`;
++	}
++
++	const indentedBody = widgetCode.split("\n").map((line, idx) => {
++		if (idx === 0) return line;
++		return "    " + line;
++	}).join("\n");
++
++	let classText: string;
++	if (variables.length > 0) {
++		const constructorParams = variables.map((v) => `    required this.${v.name},`).join("\n");
++		const fieldDeclarations = variables.map((v) => `  final ${v.type} ${v.name};`).join("\n");
++
++		classText = `\n\nclass ${newWidgetName} extends StatelessWidget {\n  const ${newWidgetName}({\n    super.key,\n${constructorParams}\n  });\n\n${fieldDeclarations}\n\n  @override\n  Widget build(BuildContext context) {\n    return ${indentedBody};\n  }\n}`;
++	} else {
++		classText = `\n\nclass ${newWidgetName} extends StatelessWidget {\n  const ${newWidgetName}({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return ${indentedBody};\n  }\n}`;
++	}
++
++	const fullEditedCode = fullCode.substring(0, targetRange.start) + usageText + fullCode.substring(targetRange.end) + classText;
++
++	return {
++		appendText: classText,
++		classText,
++		fullEditedCode,
++		replaceRange: targetRange,
++		usageText,
++	};
++}
++
++export interface ClassDeclarationInfo {
++	className: string;
++	kind: "StatelessWidget" | "StatefulWidget" | "State";
++	stateOfClassName?: string;
++	classStart: number;
++	classEnd: number;
++	headerStart: number;
++	headerEnd: number;
++}
++
++/**
++ * Detects if the given offset is on a class declaration header before the opening `{`.
++ */
++export function findClassDeclarationHeader(code: string, offset: number): ClassDeclarationInfo | undefined {
++	const scanner = new DartCodeScanner(code);
++	const classRegex = /\bclass\s+([A-Za-z0-9_]+)(?:<[^>]+>)?\s+extends\s+([A-Za-z0-9_]+)(?:<([A-Za-z0-9_]+)>)?/g;
++	let match: RegExpExecArray | null;
++
++	while ((match = classRegex.exec(code)) !== null) {
++		const classStart = match.index;
++		const className = match[1];
++		const superclass = match[2];
++		const typeArg = match[3];
++
++		const openBrace = code.indexOf("{", classStart);
++		if (openBrace === -1) continue;
++
++		if (offset >= classStart && offset <= openBrace) {
++			const closeBrace = scanner.findMatchingBracket(openBrace);
++			if (closeBrace === -1) continue;
++
++			if (superclass === "StatelessWidget") {
++				return {
++					className,
++					classEnd: closeBrace + 1,
++					classStart,
++					headerEnd: openBrace,
++					headerStart: classStart,
++					kind: "StatelessWidget",
++				};
++			} else if (superclass === "StatefulWidget") {
++				return {
++					className,
++					classEnd: closeBrace + 1,
++					classStart,
++					headerEnd: openBrace,
++					headerStart: classStart,
++					kind: "StatefulWidget",
++				};
++			} else if (superclass === "State" && typeArg) {
++				return {
++					className,
++					classEnd: closeBrace + 1,
++					classStart,
++					headerEnd: openBrace,
++					headerStart: classStart,
++					kind: "State",
++					stateOfClassName: typeArg,
++				};
++			}
++		}
++	}
++
++	return undefined;
++}
++
++/**
++ * Replaces field references with `widget.field` in method code.
++ */
++export function replaceFieldReferencesWithWidget(methodCode: string, fieldNames: string[]): string {
++	let result = methodCode;
++	for (const field of fieldNames) {
++		const regex = new RegExp(`(?<![.\\w])\\b${field}\\b(?!\\s*:)`, "g");
++		result = result.replace(regex, `widget.${field}`);
++	}
++	return result;
++}
++
++/**
++ * Replaces `widget.field` with `field` in method code.
++ */
++export function replaceWidgetReferencesWithField(methodCode: string): string {
++	return methodCode.replace(/\bwidget\.([a-zA-Z0-9_]+)\b/g, "$1");
++}
++
++/**
++ * Splits a class body into individual top-level members (constructors, fields, methods, getters, setters).
++ */
++export function parseClassMembers(bodyCode: string): string[] {
++	const members: string[] = [];
++	let memberStart = 0;
++	let inString: string | null = null;
++	let inLineComment = false;
++	let inBlockComment = false;
++	let braceDepth = 0;
++	let parenDepth = 0;
++	let bracketDepth = 0;
++
++	for (let i = 0; i < bodyCode.length; i++) {
++		const ch = bodyCode[i];
++		const next = bodyCode[i + 1];
++
++		if (inLineComment) {
++			if (ch === "\n") inLineComment = false;
++			continue;
++		}
++		if (inBlockComment) {
++			if (ch === "*" && next === "/") {
++				inBlockComment = false;
++				i++;
++			}
++			continue;
++		}
++		if (inString) {
++			if (ch === "\\") {
++				i++;
++			} else if (ch === inString) {
++				inString = null;
++			}
++			continue;
++		}
++
++		if (ch === "/" && next === "/") {
++			inLineComment = true;
++			i++;
++			continue;
++		}
++		if (ch === "/" && next === "*") {
++			inBlockComment = true;
++			i++;
++			continue;
++		}
++		if (ch === "'" || ch === '"') {
++			inString = ch;
++			continue;
++		}
++
++		if (ch === "(") parenDepth++;
++		else if (ch === ")") parenDepth--;
++		else if (ch === "{") braceDepth++;
++		else if (ch === "}") braceDepth--;
++		else if (ch === "[") bracketDepth++;
++		else if (ch === "]") bracketDepth--;
++
++		if (parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
++			if (ch === ";" || ch === "}") {
++				const memberText = bodyCode.substring(memberStart, i + 1).trim();
++				if (memberText) {
++					members.push(memberText);
++				}
++				memberStart = i + 1;
++			}
++		}
++	}
++
++	const remaining = bodyCode.substring(memberStart).trim();
++	if (remaining) {
++		members.push(remaining);
++	}
++
++	return members;
++}
++
++export function isConstructorMember(className: string | undefined, member: string): boolean {
++	if (!className) return false;
++	return new RegExp(`^\\s*(?:const\\s+|factory\\s+)?${className}\\b`).test(member.trim());
++}
++
++export function isFieldMember(member: string, className?: string): boolean {
++	const trimmed = member.trim();
++	if (className && isConstructorMember(className, trimmed)) return false;
++	if (trimmed.startsWith("@override")) return false;
++	if (trimmed.endsWith("}")) return false;
++	if (trimmed.includes("=>")) return false;
++	if (trimmed.includes("build(")) return false;
++	if (trimmed.startsWith("final ") || trimmed.startsWith("late ") || trimmed.startsWith("const ") || trimmed.startsWith("var ")) {
++		return true;
++	}
++	return trimmed.endsWith(";");
++}
++
++export function isFinalOrConstField(member: string): boolean {
++	const trimmed = member.trim();
++	return trimmed.startsWith("final ") || trimmed.startsWith("const ");
++}
++
++/**
++ * Joins class members with appropriate spacing:
++ * - Consecutive field declarations are joined with a single newline (`\n  `).
++ * - Constructors, methods, getters, and other multiline blocks are separated with a blank line (`\n\n  `).
++ */
++export function joinClassMembers(members: string[], className?: string): string {
++	if (members.length === 0) return "";
++	let result = members[0];
++	for (let i = 1; i < members.length; i++) {
++		const prev = members[i - 1];
++		const curr = members[i];
++		if (isFieldMember(prev, className) && isFieldMember(curr, className)) {
++			result += "\n  " + curr;
++		} else {
++			result += "\n\n  " + curr;
++		}
++	}
++	return result;
++}
++
++/**
++ * Converts a StatelessWidget into a StatefulWidget with a matching State class.
++ * Replaces constructor field references in build() and methods with `widget.fieldname`.
++ */
++export function convertStatelessToStateful(
++	code: string,
++	classInfo: ClassDeclarationInfo,
++	options: WidgetRefactorOptions = {},
++): { replaceRange: TextRange; newText: string } {
++	const moveNonFinalToState = options.moveNonFinalFieldsToState !== false;
++	const classCode = code.substring(classInfo.classStart, classInfo.classEnd);
++	const openBraceIndex = classCode.indexOf("{");
++	if (openBraceIndex === -1) {
++		return { newText: classCode, replaceRange: { end: classInfo.classEnd, start: classInfo.classStart } };
++	}
++
++	const bodyCode = classCode.substring(openBraceIndex + 1, classCode.length - 1);
++	const members = parseClassMembers(bodyCode);
++
++	const className = classInfo.className;
++	const stateClassName = `_${className}State`;
++
++	let widgetMembers: string[] = [];
++	const stateMembers: string[] = [];
++	const finalFieldNames: string[] = [];
++
++	for (const member of members) {
++		if (isConstructorMember(className, member)) {
++			widgetMembers.push(member);
++		} else if (isFieldMember(member, className)) {
++			if (!moveNonFinalToState || isFinalOrConstField(member)) {
++				widgetMembers.push(member);
++				const match = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=[^;]*)?;$/.exec(member.trim());
++				if (match && match[1] !== "key") {
++					finalFieldNames.push(match[1]);
++				}
++			} else {
++				// Non-final / mutable field moves to State
++				stateMembers.push(member);
++			}
++		} else {
++			stateMembers.push(member);
++		}
++	}
++
++	const transformedStateMembers = stateMembers.map((m) => {
++		if (isFieldMember(m, className)) return m;
++		return replaceFieldReferencesWithWidget(m, finalFieldNames);
++	});
++
++	// Ensure constructor in StatefulWidget has 'const ' if eligible (ends with ';')
++	const allWidgetFieldsFinal = widgetMembers.every(
++		(m) => !isFieldMember(m, className) || isFinalOrConstField(m),
++	);
++	if (allWidgetFieldsFinal) {
++		widgetMembers = widgetMembers.map((m) => {
++			if (isConstructorMember(className, m) && !m.startsWith("const ") && !m.startsWith("factory ") && m.trim().endsWith(";")) {
++				return "const " + m.trimStart();
++			}
++			return m;
++		});
++	}
++
++	const widgetBody = joinClassMembers(widgetMembers, className).trim();
++	const widgetBodyFormatted = widgetBody
++		? `  ${widgetBody}\n\n  @override\n  State<${className}> createState() => ${stateClassName}();`
++		: `  @override\n  State<${className}> createState() => ${stateClassName}();`;
++
++	const stateBody = joinClassMembers(transformedStateMembers, stateClassName).trim();
++	const stateBodyFormatted = stateBody ? `  ${stateBody}` : "";
++
++	const newWidgetClass = `class ${className} extends StatefulWidget {\n${widgetBodyFormatted}\n}`;
++	const newStateClass = `class ${stateClassName} extends State<${className}> {\n${stateBodyFormatted}\n}`;
++
++	const newText = `${newWidgetClass}\n\n${newStateClass}`;
++	return { newText, replaceRange: { end: classInfo.classEnd, start: classInfo.classStart } };
++}
++
++/**
++ * Converts a StatefulWidget + State class pair into a single StatelessWidget.
++ * Replaces `widget.fieldname` in build() and methods with `fieldname`.
++ */
++export function convertStatefulToStateless(
++	code: string,
++	classInfo: ClassDeclarationInfo,
++	options: WidgetRefactorOptions = {},
++): { replaceRange: TextRange; newText: string } {
++	const scanner = new DartCodeScanner(code);
++	const targetClassName = classInfo.kind === "State" && classInfo.stateOfClassName
++		? classInfo.stateOfClassName
++		: classInfo.className;
++
++	const widgetClassRegex = new RegExp(`\\bclass\\s+${targetClassName}\\s+extends\\s+StatefulWidget\\b`);
++	const widgetMatch = widgetClassRegex.exec(code);
++	if (!widgetMatch) {
++		return { newText: code.substring(classInfo.classStart, classInfo.classEnd), replaceRange: { end: classInfo.classEnd, start: classInfo.classStart } };
++	}
++
++	const widgetClassStart = widgetMatch.index;
++	const widgetOpenBrace = code.indexOf("{", widgetClassStart);
++	if (widgetOpenBrace === -1) return { newText: "", replaceRange: { end: classInfo.classEnd, start: classInfo.classStart } };
++	const widgetCloseBrace = scanner.findMatchingBracket(widgetOpenBrace);
++	if (widgetCloseBrace === -1) return { newText: "", replaceRange: { end: classInfo.classEnd, start: classInfo.classStart } };
++
++	const stateClassRegex = new RegExp(`\\bclass\\s+[A-Za-z0-9_]+\\s+extends\\s+State<\\s*${targetClassName}\\s*>`);
++	const stateMatch = stateClassRegex.exec(code);
++
++	let stateClassStart = -1;
++	let stateClassEnd = -1;
++	let stateBody = "";
++
++	if (stateMatch) {
++		stateClassStart = stateMatch.index;
++		const stateOpenBrace = code.indexOf("{", stateClassStart);
++		if (stateOpenBrace !== -1) {
++			const stateCloseBrace = scanner.findMatchingBracket(stateOpenBrace);
++			if (stateCloseBrace !== -1) {
++				stateClassEnd = stateCloseBrace + 1;
++				stateBody = code.substring(stateOpenBrace + 1, stateCloseBrace);
++			}
++		}
++	}
++
++	const widgetBody = code.substring(widgetOpenBrace + 1, widgetCloseBrace);
++	let widgetMembers = parseClassMembers(widgetBody).filter(
++		(m) => !m.includes("createState()") && !m.includes("State<" + targetClassName + ">"),
++	);
++
++	const stateMembers = parseClassMembers(stateBody).map((m) => replaceWidgetReferencesWithField(m));
++
++	const combinedMembers = [...widgetMembers, ...stateMembers];
++	const hasNonFinalField = combinedMembers.some(
++		(m) => isFieldMember(m, targetClassName) && !isFinalOrConstField(m),
++	);
++
++	if (hasNonFinalField && options.moveNonFinalFieldsToState !== false) {
++		// If class has non-final fields, remove 'const ' from constructor to avoid const_constructor_with_non_final_field
++		widgetMembers = widgetMembers.map((m) => {
++			if (isConstructorMember(targetClassName, m)) {
++				return m.replace(/^const\s+/, "");
++			}
++			return m;
++		});
++	} else if (!hasNonFinalField) {
++		// If all fields are final, ensure constructor has 'const ' if eligible (ends with ';')
++		widgetMembers = widgetMembers.map((m) => {
++			if (isConstructorMember(targetClassName, m) && !m.startsWith("const ") && !m.startsWith("factory ") && m.trim().endsWith(";")) {
++				return "const " + m.trimStart();
++			}
++			return m;
++		});
++	}
++
++	const finalCombined = [...widgetMembers, ...stateMembers];
++	const combinedBody = joinClassMembers(finalCombined, targetClassName).trim();
++
++	const newClass = `class ${targetClassName} extends StatelessWidget {\n  ${combinedBody}\n}`;
++
++	const replaceStart = Math.min(widgetClassStart, stateClassStart !== -1 ? stateClassStart : widgetClassStart);
++	const replaceEnd = Math.max(widgetCloseBrace + 1, stateClassEnd !== -1 ? stateClassEnd : widgetCloseBrace + 1);
++
++	return {
++		newText: newClass,
++		replaceRange: { end: replaceEnd, start: replaceStart },
++	};
++}
 diff --git a/src/extension/sdk/dev_tools/manager.ts b/src/extension/sdk/dev_tools/manager.ts
 index 83d57f88..218eee28 100644
 --- a/src/extension/sdk/dev_tools/manager.ts
@@ -1716,7 +4516,7 @@ index 22ab8d09..7d5c6a95 100644
  			void window.showErrorMessage(message, showLogAction).then((chosenAction) => {
  				if (chosenAction === showLogAction)
 diff --git a/src/extension/sdk/sdk_manager.ts b/src/extension/sdk/sdk_manager.ts
-index db388a99..33e9a27b 100644
+index db388a99..bdf69576 100644
 --- a/src/extension/sdk/sdk_manager.ts
 +++ b/src/extension/sdk/sdk_manager.ts
 @@ -1,7 +1,7 @@
@@ -1724,7 +4524,7 @@ index db388a99..33e9a27b 100644
  import * as path from "path";
  import * as vs from "vscode";
 -import { dartVMPath, flutterPath } from "../../shared/constants";
-+import { dartVMPath, executableNames, flutterPath } from "../../shared/constants";
++import { dartVMPath, executableNames } from "../../shared/constants";
  import { Logger, Sdks } from "../../shared/interfaces";
  import { versionIsAtLeast } from "../../shared/utils";
  import { existsAndIsFileSync, getChildFolders, getSdkVersion, homeRelativePath, safeRealpathSync } from "../../shared/utils/fs";
@@ -1792,7 +4592,7 @@ index db388a99..33e9a27b 100644
  				const folder = homeRelativePath(sdk.folder);
  				if (config.sdkSwitchingTarget === "global") {
  					// Clear any existing workspace setting first.
-@@ -105,20 +116,27 @@ export class DartSdkManager extends SdkManager {
+@@ -105,20 +116,25 @@ export class DartSdkManager extends SdkManager {
  }
  
  export class FlutterSdkManager extends SdkManager {
@@ -1802,14 +4602,13 @@ index db388a99..33e9a27b 100644
  	protected get currentSdk(): string | undefined { return this.sdks.flutter; }
 -	protected get configuredSdk(): string | undefined { return config.flutterSdkPath; }
 -	protected get configName(): string { return "dart.flutterSdkPaths"; }
+-	protected get executablePath() { return flutterPath; }
 +	protected get configuredSdk(): string | undefined { return config.dartNativeSdkPath; }
 +	protected get configName(): string { return "dartx.dartNativeSdkPaths"; }
-+	// Used as a fallback executable to determine SDK folders; dn is preferred.
- 	protected get executablePath() { return flutterPath; }
++	protected get executablePath() { return path.join("bin", executableNames.dn); }
 +	protected isSdkFolder(folder: string): boolean {
-+		// Accept either bin/dn or bin/flutter as evidence of a DartNative SDK.
 +		return existsAndIsFileSync(path.join(folder, "bin", executableNames.dn))
-+			|| existsAndIsFileSync(path.join(folder, flutterPath));
++			|| existsAndIsFileSync(path.join(folder, executableNames.dn));
 +	}
  	protected getLabel(version: string) {
 -		return `Flutter SDK ${version}`;
@@ -1860,19 +4659,20 @@ index b27e0781..1a5d4fc2 100644
  				canChangeFlutterSdk ? "dart.changeFlutterSdk" : undefined,
  			);
 diff --git a/src/extension/sdk/utils.ts b/src/extension/sdk/utils.ts
-index 87d7e68a..73cd8f73 100644
+index 87d7e68a..a53a70a8 100644
 --- a/src/extension/sdk/utils.ts
 +++ b/src/extension/sdk/utils.ts
-@@ -5,7 +5,7 @@ import { commands, ExtensionContext, extensions, ProgressLocation, Uri, window,
+@@ -5,7 +5,8 @@ import { commands, ExtensionContext, extensions, ProgressLocation, Uri, window,
  import { analyzerSnapshotPath, cloningFlutterMessage, DART_DOWNLOAD_URL, dartPlatformName, dartVMPath, executableNames, ExtensionRestartReason, FLUTTER_CREATE_PROJECT_TRIGGER_FILE, FLUTTER_DOWNLOAD_URL, flutterPath, isLinux, MISSING_VERSION_FILE_VERSION, openSettingsAction, SdkTypeString, showLogAction } from "../../shared/constants";
  import { GetSDKCommandConfig, GetSDKCommandResult, Logger, SdkSearchResult, SdkSearchResults, WorkspaceConfig, WritableWorkspaceConfig } from "../../shared/interfaces";
  import { flatMap, isDartSdkFromFlutter, notUndefined } from "../../shared/utils";
 -import { existsAndIsDirectorySync, existsAndIsFileSync, extractFlutterSdkPathFromPackagesFile, fsPath, getSdkVersion, hasPubspec, projectReferencesFlutter, safeRealpathSync } from "../../shared/utils/fs";
 +import { existsAndIsDirectorySync, existsAndIsFileSync, extractFlutterSdkPathFromPackagesFile, fsPath, getSdkVersion, hasPubspec, isDartNativeProjectFolder, projectReferencesFlutter, safeRealpathSync } from "../../shared/utils/fs";
++import { validateDartNativeSdkFolder } from "../../shared/dartnative/sdk_validation";
  import { resolvedPromise } from "../../shared/utils/promises";
  import { processBazelWorkspace, processDartSdkRepository, processFuchsiaWorkspace } from "../../shared/utils/workspace";
  import { envUtils, getAllProjectFolders, getDartWorkspaceFolders, resolvePaths } from "../../shared/vscode/utils";
-@@ -13,6 +13,7 @@ import { WorkspaceContext } from "../../shared/workspace";
+@@ -13,6 +14,7 @@ import { WorkspaceContext } from "../../shared/workspace";
  import { Analytics, CloneSdkResult } from "../analytics";
  import { AddSdkToPath } from "../commands/add_sdk_to_path";
  import { config } from "../config";
@@ -1880,72 +4680,229 @@ index 87d7e68a..73cd8f73 100644
  import { ringLog } from "../extension";
  import { getExcludedFolders, openLogContents, promptToReloadExtension } from "../utils";
  import { runToolProcess } from "../utils/processes";
-@@ -63,7 +64,12 @@ export class SdkUtils {
+@@ -44,18 +46,63 @@ export class SdkUtils {
+ 		context.subscriptions.push(commands.registerCommand("flutter.upgrade", () => {
+ 			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.upgrade");
+ 		}));
++		context.subscriptions.push(commands.registerCommand("dartnative.addSdkToPath", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "dartnative.addSdkToPath");
++		}));
++		context.subscriptions.push(commands.registerCommand("flutter.addSdkToPath", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "dartnative.addSdkToPath");
++		}));
++		context.subscriptions.push(commands.registerCommand("dart.getPackages", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.getPackages");
++		}));
++		context.subscriptions.push(commands.registerCommand("dart.getPackages.all", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.getPackages.all");
++		}));
++		context.subscriptions.push(commands.registerCommand("pub.get", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.get");
++		}));
++		context.subscriptions.push(commands.registerCommand("pub.get.all", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.get.all");
++		}));
++		context.subscriptions.push(commands.registerCommand("flutter.packages.get", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.get");
++		}));
++		context.subscriptions.push(commands.registerCommand("flutter.packages.get.all", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.get.all");
++		}));
++		context.subscriptions.push(commands.registerCommand("pub.upgrade", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.upgrade");
++		}));
++		context.subscriptions.push(commands.registerCommand("pub.upgrade.majorVersions", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.upgrade.majorVersions");
++		}));
++		context.subscriptions.push(commands.registerCommand("pub.outdated", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.outdated");
++		}));
++		context.subscriptions.push(commands.registerCommand("flutter.packages.upgrade", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.upgrade");
++		}));
++		context.subscriptions.push(commands.registerCommand("flutter.packages.upgrade.majorVersions", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.upgrade.majorVersions");
++		}));
++		context.subscriptions.push(commands.registerCommand("flutter.packages.outdated", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.outdated");
++		}));
++		context.subscriptions.push(commands.registerCommand("dart.upgradePackages", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.upgradePackages");
++		}));
++		context.subscriptions.push(commands.registerCommand("dart.upgradePackages.majorVersions", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.upgradePackages.majorVersions");
++		}));
++		context.subscriptions.push(commands.registerCommand("dart.listOutdatedPackages", () => {
++			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.listOutdatedPackages");
++		}));
+ 		// Wait a while before showing the error to allow the code above to have run if it will.
+ 		setTimeout(() => {
+ 			// Only show the "startup" message if we didn't already show another message as
+-			// a result of one of the above commands beinv invoked.
++			// a result of one of the above commands being invoked.
+ 			if (!this.hasShownActivationFailure) {
+-				if (workspaceContext.hasAnyFlutterProjects) {
+-					this.showRelevantActivationFailureMessage(workspaceContext, true);
+-				} else if (workspaceContext.hasAnyStandardDartProjects) {
+-					this.showRelevantActivationFailureMessage(workspaceContext, false);
+-				} else {
+-					this.logger.error("No Dart or Flutter SDK was found. Suppressing prompt because it doesn't appear that a Dart/Flutter project is open.");
+-				}
++				this.showRelevantActivationFailureMessage(workspaceContext, true);
+ 			}
+ 		}, 500);
+ 		return;
+@@ -63,7 +110,18 @@ export class SdkUtils {
  
  	private hasShownActivationFailure = false;
  	private showRelevantActivationFailureMessage(workspaceContext: WorkspaceContext, isFlutter: boolean, commandToReRun?: string) {
 -		if (isFlutter && workspaceContext.sdks.flutter && !workspaceContext.sdks.dart) {
-+		const isDartNative = (workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
-+			|| !!config.dartNativeSdkPath;
++		const isDartNative = workspaceContext.hasAnyDartNativeProjects
++			|| (workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
++			|| !config.dartNativeSdkPath
++			|| !workspaceContext.sdks.flutter
++			|| !workspaceContext.sdks.dart;
 +
 +		if (isDartNative) {
-+			void promptToLocateDartNativeSdk(this.logger, "Could not find the DartNative SDK. Please ensure 'dn' is on your PATH or configure the SDK folder.", commandToReRun);
++			const msg = !config.dartNativeSdkPath
++				? "DartNative SDK path is not set. Please locate your DartNative SDK."
++				: "DartNative binary ('dn') not found. Please locate your DartNative SDK.";
++			void promptToLocateDartNativeSdk(this.logger, msg, commandToReRun);
 +		} else if (isFlutter && workspaceContext.sdks.flutter && !workspaceContext.sdks.dart) {
  			this.showFluttersDartSdkActivationFailure();
  		} else if (isFlutter) {
  			this.showFlutterActivationFailure(commandToReRun);
-@@ -398,8 +404,34 @@ export class SdkUtils {
+@@ -337,7 +395,9 @@ export class SdkUtils {
+ 		// TODO: This has gotten very messy and needs tidying up...
+ 
+ 		let firstFlutterProject: string | undefined;
++		let firstDartNativeProject: string | undefined;
+ 		let hasAnyFlutterProject = false;
++		let hasAnyDartNativeProjects = false;
+ 		let hasAnyWebProject = false;
+ 		let hasAnyStandardDartProject = false;
+ 
+@@ -346,6 +406,7 @@ export class SdkUtils {
+ 		// Scan through them all to figure out what type of projects we have.
+ 		for (const folder of possibleProjects) {
+ 			const hasPubspecFile = hasPubspec(folder);
++			const refsDartNative = hasPubspecFile && isDartNativeProjectFolder(folder);
+ 			const refsFlutter = hasPubspecFile && projectReferencesFlutter(folder);
+ 			const refsWeb = false; // hasPubspecFile && referencesWeb(folder);
+ 			const hasFlutterCreateProjectTriggerFile =
+@@ -357,18 +418,23 @@ export class SdkUtils {
+ 			// Since we just blocked on a lot of sync FS, yield.
+ 			await resolvedPromise;
+ 
++			if (refsDartNative) {
++				hasAnyDartNativeProjects = true;
++				firstDartNativeProject = firstDartNativeProject || folder;
++			}
++
+ 			const isSomethingFlutter = refsFlutter || hasFlutterCreateProjectTriggerFile || isFlutterRepo;
+ 
+-			const kind = isSomethingFlutter ? "Flutter" : "non-Flutter";
+-			this.logger.info(`Found ${kind} project at ${folder} (Pubspec? ${hasPubspecFile}, Mobile? ${refsFlutter}, Create Trigger? ${hasFlutterCreateProjectTriggerFile}, Flutter Repo? ${isFlutterRepo})`);
++			const kind = refsDartNative ? "DartNative" : isSomethingFlutter ? "Flutter" : "non-Flutter";
++			this.logger.info(`Found ${kind} project at ${folder} (Pubspec? ${hasPubspecFile}, DartNative? ${refsDartNative}, Mobile? ${refsFlutter}, Create Trigger? ${hasFlutterCreateProjectTriggerFile}, Flutter Repo? ${isFlutterRepo})`);
+ 
+ 			// Track the first Flutter Project so we can try finding the Flutter SDK from its packages file.
+ 			firstFlutterProject = firstFlutterProject || (isSomethingFlutter ? folder : undefined);
+ 
+ 			// Set some flags we'll use to construct the workspace, so we know what things we need to light up.
+-			hasAnyFlutterProject = hasAnyFlutterProject || isSomethingFlutter;
++			hasAnyFlutterProject = hasAnyFlutterProject || isSomethingFlutter || refsDartNative;
+ 			hasAnyWebProject = hasAnyWebProject || refsWeb;
+-			hasAnyStandardDartProject = hasAnyStandardDartProject || (!isSomethingFlutter && hasPubspecFile);
++			hasAnyStandardDartProject = hasAnyStandardDartProject || (!isSomethingFlutter && !refsDartNative && hasPubspecFile);
+ 		}
+ 
+ 		// Certain types of workspaces will have special config, so read them here.
+@@ -398,8 +464,39 @@ export class SdkUtils {
  				this.logger.info(`Found Fuchsia project that is not vanilla Flutter`);
  		}
  
+-		let flutterSdkPath;
+-		if (workspaceConfig.forceFlutterWorkspace) {
 +		let dartNativeSdkPath: string | undefined;
 +		// Always search for a DartNative SDK when any hint is available: user config,
 +		// project dependencies, environment variable, or the default ~/zero location.
-+		const configuredDnPath = config.flutterSdkPath; // dartx.dartNativeSdkPath maps to flutterSdkPath via renamedSettingKeys.
-+		const hasAnyDnHint = !!(configuredDnPath || process.env.DARTNATIVE_ROOT || process.env.FLUTTER_ROOT);
-+		const firstDartNativeProject = firstFlutterProject; // DartNative projects are detected as Flutter projects.
-+		if (hasAnyDnHint || firstDartNativeProject) {
++		const configuredDnPath = config.dartNativeSdkPath || config.flutterSdkPath;
++		const hasAnyDnHint = !!(configuredDnPath || process.env.DARTNATIVE_ROOT);
++		if (hasAnyDartNativeProjects || hasAnyDnHint || firstDartNativeProject) {
 +			const dartNativeSearchPaths = [
 +				configuredDnPath,
 +				firstDartNativeProject && extractFlutterSdkPathFromPackagesFile(firstDartNativeProject),
 +				...paths,
 +				process.env.DARTNATIVE_ROOT,
 +				"~/zero",
++				"~/zero1",
 +			].filter(notUndefined);
 +
-+			const dnResult = this.findFlutterSdk(dartNativeSearchPaths);
++			const dnResult = this.findDartNativeSdk(dartNativeSearchPaths);
 +			if (dnResult.sdkPath) {
 +				dartNativeSdkPath = dnResult.sdkPath;
 +				this.logger.info(`Resolved DartNative SDK at ${dartNativeSdkPath}. Auto-resolving Flutter & Dart SDK paths to this SDK to prevent collisions.`);
 +			}
 +		}
 +
- 		let flutterSdkPath;
--		if (workspaceConfig.forceFlutterWorkspace) {
++		let flutterSdkPath: string | undefined;
 +		if (dartNativeSdkPath) {
 +			// DartNative SDK found: use it as the Flutter SDK and enable Flutter tooling.
 +			hasAnyFlutterProject = true;
 +			flutterSdkPath = dartNativeSdkPath;
++		} else if (hasAnyDartNativeProjects) {
++			// STRICT: DartNative project detected, but DartNative SDK ('dn') was not found!
++			// Under NO circumstances fall back to standard Flutter SDK search paths!
++			this.logger.warn("DartNative project detected, but no DartNative SDK ('dn') was found. Suppressing Flutter SDK fallback.");
++			flutterSdkPath = undefined;
 +		} else if (workspaceConfig.forceFlutterWorkspace) {
  			hasAnyFlutterProject = true;
  			flutterSdkPath = workspaceConfig?.flutterSdkHome;
  		} else {
-@@ -639,10 +671,13 @@ export class SdkUtils {
- 			folders,
- 			executableNames.flutter,
- 			// Also check for some additional files so we won't detect `/usr/bin/flutter` as a Flutter SDK at `/usr`.
--			(p) => this.containsFile(p, flutterPath) && (
-+			// Accept bin/dn as an equivalent indicator for DartNative SDKs.
-+			(p) => (this.containsFile(p, flutterPath) || this.containsFile(p, "bin/dn") || this.containsFile(p, "bin/dn.bat")) && (
- 				this.containsFile(p, "analysis_options.yaml")
- 				|| this.containsFile(p, "bin/flutter.bat") // Exists on non-Windows clones of Git and is an obvious sign of the SDK.
- 				|| this.containsFile(p, "bin/internal/engine.version")
-+				|| this.containsFile(p, "bin/dn")
-+				|| this.containsFile(p, "bin/dn.bat")
- 			),
+@@ -452,7 +549,11 @@ export class SdkUtils {
+ 		let hasAttemptedFlutterInitialization = false;
+ 		if (hasAnyFlutterProject && flutterSdkPath && !workspaceConfig.skipFlutterInitialization) {
+ 			hasAttemptedFlutterInitialization = true;
+-			await ensureFlutterInitialized(this.logger, path.join(flutterSdkPath, flutterPath));
++			const dnBinary = path.join(flutterSdkPath, "bin", executableNames.dn);
++			const initBinary = (hasAnyDartNativeProjects && fs.existsSync(dnBinary))
++				? dnBinary
++				: path.join(flutterSdkPath, flutterPath);
++			await ensureFlutterInitialized(this.logger, initBinary);
+ 		}
+ 
+ 		// User provided custom command to obtain the sdk path
+@@ -544,6 +645,8 @@ export class SdkUtils {
+ 			hasAnyStandardDartProject,
+ 			!!fuchsiaRoot && hasAnyStandardDartProject,
+ 			firstFlutterProject,
++			hasAnyDartNativeProjects,
++			firstDartNativeProject,
  		);
  	}
-@@ -679,8 +714,15 @@ export class SdkUtils {
+ 
+@@ -630,6 +733,19 @@ export class SdkUtils {
+ 		);
+ 	}
+ 
++	public findDartNativeSdk(folders: string[]): SdkSearchResults {
++		return this.searchPaths(
++			folders,
++			executableNames.dn,
++			(p) => this.containsFile(p, "bin/dn")
++				|| this.containsFile(p, "bin/dn.bat")
++				|| this.containsFile(p, "bin/dn.exe")
++				|| existsAndIsFileSync(path.join(p, executableNames.dn))
++				|| existsAndIsFileSync(path.join(p, "dn"))
++				|| validateDartNativeSdkFolder(p).valid,
++		);
++	}
++
+ 	private findDartSdk(folders: string[]): SdkSearchResults {
+ 		return this.searchPaths(folders, executableNames.dart, (p) => this.containsFile(p, dartVMPath) && this.containsFile(p, analyzerSnapshotPath));
+ 	}
+@@ -679,8 +795,14 @@ export class SdkUtils {
  		for (const p of sdkPaths)
  			this.logger.info(`        ${this.sdkDisplayString(p)}`);
  
@@ -1955,15 +4912,14 @@ index 87d7e68a..73cd8f73 100644
 +		sdkPaths = sdkPaths.filter((p) => {
 +			if (fs.existsSync(path.join(p.sdkPath, executableFilename)))
 +				return true;
-+			// For Flutter searches, also accept dn as the entry point binary.
-+			if (executableFilename === executableNames.flutter && (fs.existsSync(path.join(p.sdkPath, "dn")) || fs.existsSync(path.join(p.sdkPath, "dn.bat"))))
++			if (executableFilename === executableNames.dn && (fs.existsSync(path.join(p.sdkPath, "dn")) || fs.existsSync(path.join(p.sdkPath, "dn.bat")) || fs.existsSync(path.join(p.sdkPath, "dn.exe"))))
 +				return true;
 +			return false;
 +		});
  
  		this.logger.info(`    Found at:`);
  		for (const p of sdkPaths)
-@@ -694,7 +736,15 @@ export class SdkUtils {
+@@ -694,7 +816,15 @@ export class SdkUtils {
  		// Convert all the paths to their resolved locations.
  		sdkPaths = sdkPaths.map((sdkPath): SdkSearchResult => {
  			// In order to handle symlinks on the binary (not folder), we need to add the executableName before calling realpath.
@@ -1980,7 +4936,7 @@ index 87d7e68a..73cd8f73 100644
  			const realExecutableLocation = safeRealpathSync(fullPath);
  
  			if (realExecutableLocation.toLowerCase() !== fullPath.toLowerCase())
-@@ -704,8 +754,8 @@ export class SdkUtils {
+@@ -704,8 +834,8 @@ export class SdkUtils {
  			// and we should return as-is rather than walk up two levels, as we
  			// may want to use the presence of this to trigger initialisation.
  			const targetBaseName = path.basename(realExecutableLocation);
@@ -2116,7 +5072,7 @@ index 79ce00e7..fa8875f5 100644
  	return logPath
  		? logPath.replace(/\${name}/ig, filenameSafe(args.name || "unnamed-session"))
 diff --git a/src/extension/utils/processes.ts b/src/extension/utils/processes.ts
-index 2b011e5f..3f2a3df1 100644
+index 2b011e5f..94462c96 100644
 --- a/src/extension/utils/processes.ts
 +++ b/src/extension/utils/processes.ts
 @@ -1,3 +1,6 @@
@@ -2164,10 +5120,11 @@ index 2b011e5f..3f2a3df1 100644
  }
  
  export function getGlobalFlutterArgs() {
-@@ -27,6 +51,14 @@ export function setFlutterRoot(root: string) {
+@@ -27,7 +51,15 @@ export function setFlutterRoot(root: string) {
  	flutterRoot = root;
  }
  
+-export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnalytics: boolean, envOverrides?: any }) {
 +/**
 + * Records the DartNative SDK bin paths so they are prepended to PATH
 + * for spawned processes (SDK bin + embedded Dart SDK bin).
@@ -2176,10 +5133,11 @@ index 2b011e5f..3f2a3df1 100644
 +	sdkBinPaths = binPaths;
 +}
 +
- export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnalytics: boolean, envOverrides?: any }) {
++export function setupToolEnv({ suppressAnalytics, envOverrides, licenseKey }: { suppressAnalytics: boolean, envOverrides?: any, licenseKey?: string }) {
  	toolEnv = {};
  	globalFlutterArgs = [];
-@@ -40,12 +72,14 @@ export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnal
+ 
+@@ -40,12 +72,18 @@ export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnal
  		globalFlutterArgs.push("--suppress-analytics");
  	}
  
@@ -2192,6 +5150,10 @@ index 2b011e5f..3f2a3df1 100644
 +	if (flutterRoot) {
  		toolEnv.FLUTTER_ROOT = flutterRoot;
 +		toolEnv.DARTNATIVE_ROOT = flutterRoot;
++	}
++
++	if (licenseKey) {
++		toolEnv.DN_LICENSE_KEY = licenseKey;
 +	}
  
  	// Add the names/versions of each part of the tool.
@@ -2411,3 +5373,26 @@ index 78bbc2de..d14eccb0 100644
  		"src/test/test_projects"
  		// tsconfig.build.json excludes additional paths
  	]
+diff --git a/tsconfig.scripts.json b/tsconfig.scripts.json
+new file mode 100644
+index 00000000..09c9e095
+--- /dev/null
++++ b/tsconfig.scripts.json
+@@ -0,0 +1,17 @@
++{
++	"compilerOptions": {
++		"module": "CommonJS",
++		"moduleResolution": "node",
++		"target": "ES2022",
++		"rootDir": "scripts",
++		"outDir": "scripts",
++		"lib": ["ES2022"],
++		"sourceMap": true,
++		"strict": true,
++		"skipLibCheck": true,
++		"ignoreDeprecations": "6.0",
++		"types": ["node"]
++	},
++	"include": ["scripts/**/*.ts"],
++	"exclude": ["node_modules"]
++}

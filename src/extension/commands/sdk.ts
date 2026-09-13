@@ -59,24 +59,30 @@ export class BaseSdkCommands implements IAmDisposable {
 	}
 
 	public runFlutter(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
-		const isDartNative = selection && isDartNativeProjectFolder(fsPath(selection));
+		const isDartNative = (selection && (isDartNativeProjectFolder(fsPath(selection)) || util.isInsideDartNativeProject(selection)))
+			|| this.workspace.hasAnyDartNativeProjects;
 		const toolName = isDartNative ? "dn" : "flutter";
 		return this.runCommandForWorkspace(this.runFlutterInFolder.bind(this), `Select the folder to run "${toolName} ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
 	}
 
 	public runFlutterInFolder(folder: string, args: string[], packageOrFolderDisplayName: string | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, customScript?: CustomScript): Promise<RunProcessResult | undefined> {
-		const isDartNative = isDartNativeProjectFolder(folder);
+		const isDartNative = isDartNativeProjectFolder(folder)
+			|| util.isInsideDartNativeProject(vs.Uri.file(folder))
+			|| this.workspace.hasAnyDartNativeProjects;
 		const dnBinaryPath = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
 		const flutterBinaryPath = this.sdks.flutter ? path.join(this.sdks.flutter, flutterPath) : undefined;
 
 		if (isDartNative) {
 			if (!dnBinaryPath || !fs.existsSync(dnBinaryPath)) {
-				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK.");
-				throw new Error("DartNative binary ('dn') not found.");
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to run this command.");
+				return Promise.resolve(undefined);
 			}
 		} else if (!this.sdks.flutter) {
 			throw new Error("Flutter SDK not available");
 		}
+
+		if (isDartNative && (!packageOrFolderDisplayName || packageOrFolderDisplayName === "flutter"))
+			packageOrFolderDisplayName = "DartNative";
 
 		const defaultExec = isDartNative ? dnBinaryPath! : flutterBinaryPath!;
 
@@ -105,7 +111,7 @@ export class BaseSdkCommands implements IAmDisposable {
 			allArgs = globalArgs.concat(subcommandArgs).concat(execution.args).concat(pubArgs);
 
 			const licenseKey = config.dartNativeLicenseKey?.trim();
-			if (licenseKey && !allArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
+			if (subcommand === "run" && licenseKey && !allArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
 				allArgs.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
 			}
 		} else {
@@ -119,28 +125,27 @@ export class BaseSdkCommands implements IAmDisposable {
 	}
 
 	public runPub(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
-		const isDartNative = selection && isDartNativeProjectFolder(fsPath(selection));
+		const isDartNative = (selection && (isDartNativeProjectFolder(fsPath(selection)) || util.isInsideDartNativeProject(selection)))
+			|| this.workspace.hasAnyDartNativeProjects;
 		const toolName = isDartNative ? "dn pub" : "pub";
 		return this.runCommandForWorkspace(this.runPubInFolder.bind(this), `Select the folder to run "${toolName} ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
 	}
 
 	protected runPubInFolder(folder: string, args: string[], packageOrFolderDisplayName: string, alwaysShowOutput = false, operationProgress?: OperationProgress): Promise<RunProcessResult | undefined> {
-		const isDartNative = isDartNativeProjectFolder(folder);
+		const isDartNative = isDartNativeProjectFolder(folder)
+			|| util.isInsideDartNativeProject(vs.Uri.file(folder))
+			|| this.workspace.hasAnyDartNativeProjects;
 		const folderConfig = config.for(vs.Uri.file(folder));
 		const pubAdditional = folderConfig.pubAdditionalArgs;
 
 		if (isDartNative) {
 			const dnBinary = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
 			if (!dnBinary || !fs.existsSync(dnBinary)) {
-				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Package operations for DartNative projects require the 'dn' tool.", "dart.getPackages");
-				throw new Error("DartNative binary ('dn') not found. Package operations for DartNative projects require the 'dn' tool.");
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK.", "dart.getPackages");
+				return Promise.resolve(undefined);
 			}
 			const globalArgs = folderConfig.flutterAdditionalArgs;
 			const dnArgs = globalArgs.concat(["pub", ...args]).concat(pubAdditional);
-			const licenseKey = config.dartNativeLicenseKey?.trim();
-			if (licenseKey && !dnArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
-				dnArgs.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
-			}
 			return this.runCommandInFolder(packageOrFolderDisplayName, folder, dnBinary, dnArgs, alwaysShowOutput, operationProgress);
 		}
 

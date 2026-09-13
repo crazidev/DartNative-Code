@@ -65,7 +65,16 @@
 		"onTaskType:dart",
 		"onTaskType:flutter",
 		"onUri",
-		"onDebugDynamicConfigurations"
+		"onDebugDynamicConfigurations",
+		"onCommand:dart.locateDartNativeSdk",
+		"onCommand:dart.setDartNativeLicenseKey",
+		"onCommand:dartnative.addSdkToPath",
+		"onCommand:dart.getPackages",
+		"onCommand:dart.getPackages.all",
+		"onCommand:pub.get",
+		"onCommand:pub.get.all",
+		"onCommand:flutter.packages.get",
+		"onCommand:flutter.packages.get.all"
 	],
 	"main": "./out/dist/extension",
 	"contributes": {
@@ -130,16 +139,6 @@
 			{
 				"command": "dart.createProject",
 				"title": "Create New Project",
-				"category": "Dart"
-			},
-			{
-				"command": "flutter.addSdkToPath",
-				"title": "Add SDK to PATH",
-				"category": "DartNative"
-			},
-			{
-				"command": "dart.addSdkToPath",
-				"title": "Add Dart SDK to PATH",
 				"category": "Dart"
 			},
 			{
@@ -905,14 +904,6 @@
 					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
 				},
 				{
-					"command": "dart.addSdkToPath",
-					"when": "dart-code:anyProjectLoaded"
-				},
-				{
-					"command": "flutter.addSdkToPath",
-					"when": "dart-code:anyFlutterProjectLoaded"
-				},
-				{
 					"command": "dart.writeRecommendedSettings",
 					"when": "dart-code:anyProjectLoaded"
 				},
@@ -1258,6 +1249,10 @@
 				{
 					"command": "_dart.settings.openFlutterTestAdditionalArgs",
 					"when": "false"
+				},
+				{
+					"command": "dartnative.addSdkToPath",
+					"when": "dart-code:anyFlutterProjectLoaded"
 				}
 			],
 			"debug/toolBar": [
@@ -2454,7 +2449,13 @@
 							"string"
 						],
 						"default": null,
-						"markdownDescription": "The DartNative license key. When configured, this is passed to DartNative CLI commands (`dn run`, `dn pub get`, `dn test`, etc.) as `--dart-define=DN_LICENSE_KEY=<key>`.",
+						"markdownDescription": "The DartNative license key. When configured, this is exported as the environment variable `DN_LICENSE_KEY` and passed to `dn run` as `--dart-define=DN_LICENSE_KEY=<key>`.",
+						"scope": "window"
+					},
+					"dartx.showCommandsWhenSdkMissing": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Whether to show other commands (such as Get Packages) in the command palette when the DartNative SDK is missing or not configured.",
 						"scope": "window"
 					}
 				}

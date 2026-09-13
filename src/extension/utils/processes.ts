@@ -59,7 +59,7 @@ export function setSdkBinPaths(binPaths: string[]) {
 	sdkBinPaths = binPaths;
 }
 
-export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnalytics: boolean, envOverrides?: any }) {
+export function setupToolEnv({ suppressAnalytics, envOverrides, licenseKey }: { suppressAnalytics: boolean, envOverrides?: any, licenseKey?: string }) {
 	toolEnv = {};
 	globalFlutterArgs = [];
 
@@ -79,6 +79,10 @@ export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnal
 	if (flutterRoot) {
 		toolEnv.FLUTTER_ROOT = flutterRoot;
 		toolEnv.DARTNATIVE_ROOT = flutterRoot;
+	}
+
+	if (licenseKey) {
+		toolEnv.DN_LICENSE_KEY = licenseKey;
 	}
 
 	// Add the names/versions of each part of the tool.

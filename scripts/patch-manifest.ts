@@ -64,10 +64,23 @@ function main() {
 		}
 	}
 
+	// 2.3 Remove unwanted commands if defined in overlay.
+	const removedCommands: Set<string> = new Set(overlay.removedCommands || []);
+	if (removedCommands.size > 0 && Array.isArray(pkg.contributes?.commands)) {
+		pkg.contributes.commands = pkg.contributes.commands.filter((cmd: any) => {
+			if (removedCommands.has(cmd.command)) {
+				console.log(`  → removing command: ${cmd.command}`);
+				return false;
+			}
+			return true;
+		});
+	}
+
 	// 2.5 Add additional commands if defined in overlay.
 	if (Array.isArray(overlay.additionalCommands)) {
 		pkg.contributes = pkg.contributes || {};
 		pkg.contributes.commands = pkg.contributes.commands || [];
+		pkg.activationEvents = pkg.activationEvents || [];
 		const existingCommands = new Set(pkg.contributes.commands.map((c: any) => c.command));
 		for (const cmd of overlay.additionalCommands) {
 			if (!existingCommands.has(cmd.command)) {
@@ -75,16 +88,42 @@ function main() {
 				pkg.contributes.commands.push(cmd);
 				existingCommands.add(cmd.command);
 			}
+			const onCmd = `onCommand:${cmd.command}`;
+			if (!pkg.activationEvents.includes(onCmd)) {
+				console.log(`  → adding activationEvent: ${onCmd}`);
+				pkg.activationEvents.push(onCmd);
+			}
 		}
 	}
 
-	// 3. Disable incompatible commands across all menus.
+	if (Array.isArray(overlay.activationEvents)) {
+		pkg.activationEvents = pkg.activationEvents || [];
+		for (const event of overlay.activationEvents) {
+			if (!pkg.activationEvents.includes(event)) {
+				pkg.activationEvents.push(event);
+			}
+		}
+	}
+
+	// 3. Handle removed commands (purge them from all menus and keybindings)
+	// and disable remaining incompatible commands across all menus.
 	const disabledCommands: Set<string> = new Set(overlay.disabledCommands || []);
 	const menus: Record<string, any[]> = pkg.contributes?.menus || {};
 
 	for (const [menuName, menuItems] of Object.entries(menus)) {
 		if (Array.isArray(menuItems)) {
-			for (const entry of menuItems) {
+			// 3.1 Completely purge any menu items referencing removedCommands.
+			const filtered = menuItems.filter((entry) => {
+				if (entry.command && removedCommands.has(entry.command)) {
+					console.log(`  → removing menu entry in ${menuName}: ${entry.command}`);
+					return false;
+				}
+				return true;
+			});
+			menus[menuName] = filtered;
+
+			// 3.2 Disable remaining disabled commands by setting when: "false".
+			for (const entry of filtered) {
 				if (entry.command && disabledCommands.has(entry.command)) {
 					if (entry.when !== "false") {
 						console.log(`  → disabling menu entry in ${menuName}: ${entry.command} (was: "${entry.when}")`);
@@ -95,14 +134,41 @@ function main() {
 		}
 	}
 
+	// Purge from keybindings as well if any exist.
+	if (Array.isArray(pkg.contributes?.keybindings)) {
+		pkg.contributes.keybindings = pkg.contributes.keybindings.filter((kb: any) => {
+			if (kb.command && removedCommands.has(kb.command)) {
+				console.log(`  → removing keybinding for: ${kb.command}`);
+				return false;
+			}
+			return true;
+		});
+	}
+
 	const palette: any[] = menus.commandPalette || [];
 	const paletteMap = new Map<string, any>(palette.map((e: any) => [e.command, e]));
 
 	for (const cmdId of disabledCommands) {
+		if (removedCommands.has(cmdId))
+			continue;
 		if (!paletteMap.has(cmdId)) {
 			// Add new hidden entry.
 			console.log(`  → adding hidden command palette entry: ${cmdId}`);
 			palette.push({ command: cmdId, when: "false" });
+		} else {
+			paletteMap.get(cmdId)!.when = "false";
+		}
+	}
+
+	// Also support explicit commandPalette additions/overrides from overlay.
+	if (Array.isArray(overlay.commandPalette)) {
+		for (const item of overlay.commandPalette) {
+			const existing = palette.find((e: any) => e.command === item.command);
+			if (existing) {
+				existing.when = item.when;
+			} else {
+				palette.push(item);
+			}
 		}
 	}
 

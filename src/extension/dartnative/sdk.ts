@@ -52,14 +52,16 @@ export function isDartNativeSdk(
 }
 
 /**
- * Given a resolved Flutter/DartNative SDK path, returns the path to the
- * `dn` executable if it exists, otherwise falls back to flutter.
+ * Given a resolved DartNative SDK path, returns the path to the
+ * `dn` executable if it exists, otherwise throws or returns fallback if provided.
  */
-export function resolveDnExecutable(sdkFlutterPath: string, flutterExecutable: string): string {
+export function resolveDnExecutable(sdkFlutterPath: string, fallbackExecutable?: string): string {
 	const dnPath = path.join(sdkFlutterPath, "bin", executableNames.dn);
 	if (fs.existsSync(dnPath))
 		return dnPath;
-	return flutterExecutable;
+	if (fallbackExecutable)
+		return fallbackExecutable;
+	throw new Error(`DartNative binary ('dn') not found in SDK: ${sdkFlutterPath}`);
 }
 
 /**

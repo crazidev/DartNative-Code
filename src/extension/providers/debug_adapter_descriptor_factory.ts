@@ -68,20 +68,20 @@ export class DartDebugAdapterDescriptorFactory implements DebugAdapterDescriptor
 			const conf = session?.configuration as { cwd?: string; program?: string } | undefined;
 			const cwd = typeof conf?.cwd === "string" ? conf.cwd : undefined;
 			const program = typeof conf?.program === "string" ? conf.program : undefined;
-			const isDartNative = (session?.workspaceFolder && isDartNativeProjectFolder(fsPath(session.workspaceFolder.uri)))
+			const isDartNative = this.workspaceContext.hasAnyDartNativeProjects
+				|| (session?.workspaceFolder && isDartNativeProjectFolder(fsPath(session.workspaceFolder.uri)))
 				|| (cwd && isDartNativeProjectFolder(cwd))
-				|| (program && isPathInsideDartNativeProject(program))
-				|| (this.sdks.flutter && fs.existsSync(path.join(this.sdks.flutter, "bin", executableNames.dn)));
+				|| (program && isPathInsideDartNativeProject(program));
 
-			let flutterExecutable = this.sdks.flutter ? path.join(this.sdks.flutter, flutterPath) : executableNames.flutter;
-			if (isDartNative && this.sdks.flutter) {
-				const dnPath = path.join(this.sdks.flutter, "bin", executableNames.dn);
-				if (fs.existsSync(dnPath))
-					flutterExecutable = dnPath;
-			} else if (this.sdks.flutter && !fs.existsSync(flutterExecutable)) {
-				const dnPath = path.join(this.sdks.flutter, "bin", executableNames.dn);
-				if (fs.existsSync(dnPath))
-					flutterExecutable = dnPath;
+			let flutterExecutable: string;
+			if (isDartNative) {
+				const dnPath = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
+				if (!dnPath || !fs.existsSync(dnPath)) {
+					throw new Error("DartNative binary ('dn') not found. Please locate your DartNative SDK.");
+				}
+				flutterExecutable = dnPath;
+			} else {
+				flutterExecutable = this.sdks.flutter ? path.join(this.sdks.flutter, flutterPath) : executableNames.flutter;
 			}
 			const executable = isDartOrDartTest
 				? path.join(this.sdks.dart, dartVMPath)

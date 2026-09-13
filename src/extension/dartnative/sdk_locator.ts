@@ -79,7 +79,7 @@ export async function promptToLocateDartNativeSdk(
 	commandToReRun?: string,
 ): Promise<void> {
 	const locateAction = "Locate SDK";
-	const displayMessage = message ?? "Could not find the DartNative SDK ('dn'). Please locate your SDK.";
+	const displayMessage = message ?? "DartNative binary ('dn') not found.";
 
 	const userAction = await vs.window.showErrorMessage(displayMessage, locateAction);
 	if (userAction === locateAction)
@@ -94,8 +94,8 @@ export async function setDartNativeLicenseKeyCommand(logger: Logger, sdks?: { fl
 	const currentKey = config.dartNativeLicenseKey ?? "";
 	const key = await vs.window.showInputBox({
 		ignoreFocusOut: true,
-		placeHolder: "e.g. dartnative_key_example",
-		prompt: "Enter your DartNative License Key",
+		placeHolder: "dnk_*******************",
+		prompt: "Paste your DartNative License Key",
 		value: currentKey,
 	});
 
@@ -112,9 +112,10 @@ export async function setDartNativeLicenseKeyCommand(logger: Logger, sdks?: { fl
 	const executableToRun = dnBinary && fs.existsSync(dnBinary) ? dnBinary : executableNames.dn;
 
 	if (trimmedKey) {
+		process.env.DN_LICENSE_KEY = trimmedKey;
 		try {
 			logger.info(`Running: ${executableToRun} config --license-key ***`);
-			const result = await runToolProcess(logger, undefined, executableToRun, ["config", "--license-key", trimmedKey]);
+			const result = await runToolProcess(logger, undefined, executableToRun, ["config", "--license-key", trimmedKey], { DN_LICENSE_KEY: trimmedKey });
 			if (result.exitCode === 0) {
 				void vs.window.showInformationMessage("DartNative License Key configured successfully.");
 			} else {

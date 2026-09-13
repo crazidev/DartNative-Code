@@ -6,6 +6,7 @@ import { analyzerSnapshotPath, cloningFlutterMessage, DART_DOWNLOAD_URL, dartPla
 import { GetSDKCommandConfig, GetSDKCommandResult, Logger, SdkSearchResult, SdkSearchResults, WorkspaceConfig, WritableWorkspaceConfig } from "../../shared/interfaces";
 import { flatMap, isDartSdkFromFlutter, notUndefined } from "../../shared/utils";
 import { existsAndIsDirectorySync, existsAndIsFileSync, extractFlutterSdkPathFromPackagesFile, fsPath, getSdkVersion, hasPubspec, isDartNativeProjectFolder, projectReferencesFlutter, safeRealpathSync } from "../../shared/utils/fs";
+import { validateDartNativeSdkFolder } from "../../shared/dartnative/sdk_validation";
 import { resolvedPromise } from "../../shared/utils/promises";
 import { processBazelWorkspace, processDartSdkRepository, processFuchsiaWorkspace } from "../../shared/utils/workspace";
 import { envUtils, getAllProjectFolders, getDartWorkspaceFolders, resolvePaths } from "../../shared/vscode/utils";
@@ -45,18 +46,63 @@ export class SdkUtils {
 		context.subscriptions.push(commands.registerCommand("flutter.upgrade", () => {
 			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.upgrade");
 		}));
+		context.subscriptions.push(commands.registerCommand("dartnative.addSdkToPath", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "dartnative.addSdkToPath");
+		}));
+		context.subscriptions.push(commands.registerCommand("flutter.addSdkToPath", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "dartnative.addSdkToPath");
+		}));
+		context.subscriptions.push(commands.registerCommand("dart.getPackages", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.getPackages");
+		}));
+		context.subscriptions.push(commands.registerCommand("dart.getPackages.all", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.getPackages.all");
+		}));
+		context.subscriptions.push(commands.registerCommand("pub.get", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.get");
+		}));
+		context.subscriptions.push(commands.registerCommand("pub.get.all", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.get.all");
+		}));
+		context.subscriptions.push(commands.registerCommand("flutter.packages.get", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.get");
+		}));
+		context.subscriptions.push(commands.registerCommand("flutter.packages.get.all", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.get.all");
+		}));
+		context.subscriptions.push(commands.registerCommand("pub.upgrade", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.upgrade");
+		}));
+		context.subscriptions.push(commands.registerCommand("pub.upgrade.majorVersions", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.upgrade.majorVersions");
+		}));
+		context.subscriptions.push(commands.registerCommand("pub.outdated", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "pub.outdated");
+		}));
+		context.subscriptions.push(commands.registerCommand("flutter.packages.upgrade", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.upgrade");
+		}));
+		context.subscriptions.push(commands.registerCommand("flutter.packages.upgrade.majorVersions", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.upgrade.majorVersions");
+		}));
+		context.subscriptions.push(commands.registerCommand("flutter.packages.outdated", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "flutter.packages.outdated");
+		}));
+		context.subscriptions.push(commands.registerCommand("dart.upgradePackages", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.upgradePackages");
+		}));
+		context.subscriptions.push(commands.registerCommand("dart.upgradePackages.majorVersions", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.upgradePackages.majorVersions");
+		}));
+		context.subscriptions.push(commands.registerCommand("dart.listOutdatedPackages", () => {
+			this.showRelevantActivationFailureMessage(workspaceContext, true, "dart.listOutdatedPackages");
+		}));
 		// Wait a while before showing the error to allow the code above to have run if it will.
 		setTimeout(() => {
 			// Only show the "startup" message if we didn't already show another message as
-			// a result of one of the above commands beinv invoked.
+			// a result of one of the above commands being invoked.
 			if (!this.hasShownActivationFailure) {
-				if (workspaceContext.hasAnyFlutterProjects) {
-					this.showRelevantActivationFailureMessage(workspaceContext, true);
-				} else if (workspaceContext.hasAnyStandardDartProjects) {
-					this.showRelevantActivationFailureMessage(workspaceContext, false);
-				} else {
-					this.logger.error("No Dart or Flutter SDK was found. Suppressing prompt because it doesn't appear that a Dart/Flutter project is open.");
-				}
+				this.showRelevantActivationFailureMessage(workspaceContext, true);
 			}
 		}, 500);
 		return;
@@ -64,11 +110,17 @@ export class SdkUtils {
 
 	private hasShownActivationFailure = false;
 	private showRelevantActivationFailureMessage(workspaceContext: WorkspaceContext, isFlutter: boolean, commandToReRun?: string) {
-		const isDartNative = (workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
-			|| !!config.dartNativeSdkPath;
+		const isDartNative = workspaceContext.hasAnyDartNativeProjects
+			|| (workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
+			|| !config.dartNativeSdkPath
+			|| !workspaceContext.sdks.flutter
+			|| !workspaceContext.sdks.dart;
 
 		if (isDartNative) {
-			void promptToLocateDartNativeSdk(this.logger, "Could not find the DartNative SDK. Please ensure 'dn' is on your PATH or configure the SDK folder.", commandToReRun);
+			const msg = !config.dartNativeSdkPath
+				? "DartNative SDK path is not set. Please locate your DartNative SDK."
+				: "DartNative binary ('dn') not found. Please locate your DartNative SDK.";
+			void promptToLocateDartNativeSdk(this.logger, msg, commandToReRun);
 		} else if (isFlutter && workspaceContext.sdks.flutter && !workspaceContext.sdks.dart) {
 			this.showFluttersDartSdkActivationFailure();
 		} else if (isFlutter) {
@@ -343,7 +395,9 @@ export class SdkUtils {
 		// TODO: This has gotten very messy and needs tidying up...
 
 		let firstFlutterProject: string | undefined;
+		let firstDartNativeProject: string | undefined;
 		let hasAnyFlutterProject = false;
+		let hasAnyDartNativeProjects = false;
 		let hasAnyWebProject = false;
 		let hasAnyStandardDartProject = false;
 
@@ -352,6 +406,7 @@ export class SdkUtils {
 		// Scan through them all to figure out what type of projects we have.
 		for (const folder of possibleProjects) {
 			const hasPubspecFile = hasPubspec(folder);
+			const refsDartNative = hasPubspecFile && isDartNativeProjectFolder(folder);
 			const refsFlutter = hasPubspecFile && projectReferencesFlutter(folder);
 			const refsWeb = false; // hasPubspecFile && referencesWeb(folder);
 			const hasFlutterCreateProjectTriggerFile =
@@ -363,18 +418,23 @@ export class SdkUtils {
 			// Since we just blocked on a lot of sync FS, yield.
 			await resolvedPromise;
 
+			if (refsDartNative) {
+				hasAnyDartNativeProjects = true;
+				firstDartNativeProject = firstDartNativeProject || folder;
+			}
+
 			const isSomethingFlutter = refsFlutter || hasFlutterCreateProjectTriggerFile || isFlutterRepo;
 
-			const kind = isSomethingFlutter ? "Flutter" : "non-Flutter";
-			this.logger.info(`Found ${kind} project at ${folder} (Pubspec? ${hasPubspecFile}, Mobile? ${refsFlutter}, Create Trigger? ${hasFlutterCreateProjectTriggerFile}, Flutter Repo? ${isFlutterRepo})`);
+			const kind = refsDartNative ? "DartNative" : isSomethingFlutter ? "Flutter" : "non-Flutter";
+			this.logger.info(`Found ${kind} project at ${folder} (Pubspec? ${hasPubspecFile}, DartNative? ${refsDartNative}, Mobile? ${refsFlutter}, Create Trigger? ${hasFlutterCreateProjectTriggerFile}, Flutter Repo? ${isFlutterRepo})`);
 
 			// Track the first Flutter Project so we can try finding the Flutter SDK from its packages file.
 			firstFlutterProject = firstFlutterProject || (isSomethingFlutter ? folder : undefined);
 
 			// Set some flags we'll use to construct the workspace, so we know what things we need to light up.
-			hasAnyFlutterProject = hasAnyFlutterProject || isSomethingFlutter;
+			hasAnyFlutterProject = hasAnyFlutterProject || isSomethingFlutter || refsDartNative;
 			hasAnyWebProject = hasAnyWebProject || refsWeb;
-			hasAnyStandardDartProject = hasAnyStandardDartProject || (!isSomethingFlutter && hasPubspecFile);
+			hasAnyStandardDartProject = hasAnyStandardDartProject || (!isSomethingFlutter && !refsDartNative && hasPubspecFile);
 		}
 
 		// Certain types of workspaces will have special config, so read them here.
@@ -407,30 +467,35 @@ export class SdkUtils {
 		let dartNativeSdkPath: string | undefined;
 		// Always search for a DartNative SDK when any hint is available: user config,
 		// project dependencies, environment variable, or the default ~/zero location.
-		const configuredDnPath = config.flutterSdkPath; // dartx.dartNativeSdkPath maps to flutterSdkPath via renamedSettingKeys.
-		const hasAnyDnHint = !!(configuredDnPath || process.env.DARTNATIVE_ROOT || process.env.FLUTTER_ROOT);
-		const firstDartNativeProject = firstFlutterProject; // DartNative projects are detected as Flutter projects.
-		if (hasAnyDnHint || firstDartNativeProject) {
+		const configuredDnPath = config.dartNativeSdkPath || config.flutterSdkPath;
+		const hasAnyDnHint = !!(configuredDnPath || process.env.DARTNATIVE_ROOT);
+		if (hasAnyDartNativeProjects || hasAnyDnHint || firstDartNativeProject) {
 			const dartNativeSearchPaths = [
 				configuredDnPath,
 				firstDartNativeProject && extractFlutterSdkPathFromPackagesFile(firstDartNativeProject),
 				...paths,
 				process.env.DARTNATIVE_ROOT,
 				"~/zero",
+				"~/zero1",
 			].filter(notUndefined);
 
-			const dnResult = this.findFlutterSdk(dartNativeSearchPaths);
+			const dnResult = this.findDartNativeSdk(dartNativeSearchPaths);
 			if (dnResult.sdkPath) {
 				dartNativeSdkPath = dnResult.sdkPath;
 				this.logger.info(`Resolved DartNative SDK at ${dartNativeSdkPath}. Auto-resolving Flutter & Dart SDK paths to this SDK to prevent collisions.`);
 			}
 		}
 
-		let flutterSdkPath;
+		let flutterSdkPath: string | undefined;
 		if (dartNativeSdkPath) {
 			// DartNative SDK found: use it as the Flutter SDK and enable Flutter tooling.
 			hasAnyFlutterProject = true;
 			flutterSdkPath = dartNativeSdkPath;
+		} else if (hasAnyDartNativeProjects) {
+			// STRICT: DartNative project detected, but DartNative SDK ('dn') was not found!
+			// Under NO circumstances fall back to standard Flutter SDK search paths!
+			this.logger.warn("DartNative project detected, but no DartNative SDK ('dn') was found. Suppressing Flutter SDK fallback.");
+			flutterSdkPath = undefined;
 		} else if (workspaceConfig.forceFlutterWorkspace) {
 			hasAnyFlutterProject = true;
 			flutterSdkPath = workspaceConfig?.flutterSdkHome;
@@ -484,7 +549,11 @@ export class SdkUtils {
 		let hasAttemptedFlutterInitialization = false;
 		if (hasAnyFlutterProject && flutterSdkPath && !workspaceConfig.skipFlutterInitialization) {
 			hasAttemptedFlutterInitialization = true;
-			await ensureFlutterInitialized(this.logger, path.join(flutterSdkPath, flutterPath));
+			const dnBinary = path.join(flutterSdkPath, "bin", executableNames.dn);
+			const initBinary = (hasAnyDartNativeProjects && fs.existsSync(dnBinary))
+				? dnBinary
+				: path.join(flutterSdkPath, flutterPath);
+			await ensureFlutterInitialized(this.logger, initBinary);
 		}
 
 		// User provided custom command to obtain the sdk path
@@ -576,6 +645,8 @@ export class SdkUtils {
 			hasAnyStandardDartProject,
 			!!fuchsiaRoot && hasAnyStandardDartProject,
 			firstFlutterProject,
+			hasAnyDartNativeProjects,
+			firstDartNativeProject,
 		);
 	}
 
@@ -662,6 +733,19 @@ export class SdkUtils {
 		);
 	}
 
+	public findDartNativeSdk(folders: string[]): SdkSearchResults {
+		return this.searchPaths(
+			folders,
+			executableNames.dn,
+			(p) => this.containsFile(p, "bin/dn")
+				|| this.containsFile(p, "bin/dn.bat")
+				|| this.containsFile(p, "bin/dn.exe")
+				|| existsAndIsFileSync(path.join(p, executableNames.dn))
+				|| existsAndIsFileSync(path.join(p, "dn"))
+				|| validateDartNativeSdkFolder(p).valid,
+		);
+	}
+
 	private findDartSdk(folders: string[]): SdkSearchResults {
 		return this.searchPaths(folders, executableNames.dart, (p) => this.containsFile(p, dartVMPath) && this.containsFile(p, analyzerSnapshotPath));
 	}
@@ -671,13 +755,10 @@ export class SdkUtils {
 			folders,
 			executableNames.flutter,
 			// Also check for some additional files so we won't detect `/usr/bin/flutter` as a Flutter SDK at `/usr`.
-			// Accept bin/dn as an equivalent indicator for DartNative SDKs.
-			(p) => (this.containsFile(p, flutterPath) || this.containsFile(p, "bin/dn") || this.containsFile(p, "bin/dn.bat")) && (
+			(p) => this.containsFile(p, flutterPath) && (
 				this.containsFile(p, "analysis_options.yaml")
 				|| this.containsFile(p, "bin/flutter.bat") // Exists on non-Windows clones of Git and is an obvious sign of the SDK.
 				|| this.containsFile(p, "bin/internal/engine.version")
-				|| this.containsFile(p, "bin/dn")
-				|| this.containsFile(p, "bin/dn.bat")
 			),
 		);
 	}
@@ -718,8 +799,7 @@ export class SdkUtils {
 		sdkPaths = sdkPaths.filter((p) => {
 			if (fs.existsSync(path.join(p.sdkPath, executableFilename)))
 				return true;
-			// For Flutter searches, also accept dn as the entry point binary.
-			if (executableFilename === executableNames.flutter && (fs.existsSync(path.join(p.sdkPath, "dn")) || fs.existsSync(path.join(p.sdkPath, "dn.bat"))))
+			if (executableFilename === executableNames.dn && (fs.existsSync(path.join(p.sdkPath, "dn")) || fs.existsSync(path.join(p.sdkPath, "dn.bat")) || fs.existsSync(path.join(p.sdkPath, "dn.exe"))))
 				return true;
 			return false;
 		});

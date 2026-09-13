@@ -3,7 +3,9 @@ import * as path from "path";
 import * as vs from "vscode";
 import { CancellationToken, DebugConfiguration, DebugConfigurationProvider, ProviderResult, Uri, window, workspace, WorkspaceFolder } from "vscode";
 import { FlutterCapabilities } from "../../shared/capabilities/flutter";
-import { fiveSecondsInMs, isDartCodeTestRun, runAnywayAction, showErrorsAction } from "../../shared/constants";
+import { executableNames, fiveSecondsInMs, isDartCodeTestRun, runAnywayAction, showErrorsAction } from "../../shared/constants";
+import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
+import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
 import { HAS_LAST_DEBUG_CONFIG, HAS_LAST_TEST_DEBUG_CONFIG } from "../../shared/constants.contexts";
 import { DartLaunchArgs, DartVsCodeLaunchArgs } from "../../shared/debugging/interfaces";
 import { DebuggerType, debuggerTypeFromString, VmServiceExtension } from "../../shared/enums";
@@ -106,6 +108,20 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
 		const { debuggerType, projectRoot } = this.selectDebuggerType(debugConfig, argsHaveTestFilter, isTest, logger);
 		const isFlutter = debuggerType === DebuggerType.Flutter || debuggerType === DebuggerType.FlutterTest;
 		const isIntegrationTest = debugConfig.program && isInsideFolderNamed(debugConfig.program, "integration_test");
+
+		const isDartNative = this.wsContext.hasAnyDartNativeProjects
+			|| (projectRoot && isDartNativeProjectFolder(projectRoot))
+			|| (debugConfig.cwd && isDartNativeProjectFolder(debugConfig.cwd))
+			|| (folder && isDartNativeProjectFolder(fsPath(folder.uri)));
+
+		if (isDartNative) {
+			const dnBinary = this.wsContext.sdks.flutter ? path.join(this.wsContext.sdks.flutter, "bin", executableNames.dn) : undefined;
+			if (!dnBinary || !fs.existsSync(dnBinary)) {
+				this.logger.warn("DartNative binary ('dn') not found when attempting to start debug session");
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to run or debug this project.");
+				return undefined;
+			}
+		}
 
 		// Handle detecting a Flutter app, but the extension has loaded in Dart-only mode.
 		if (isFlutter && !this.wsContext.hasAnyFlutterProjects) {
@@ -599,8 +615,12 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
 	private async setupDebugConfig(folder: WorkspaceFolder | undefined, debugConfig: DartVsCodeLaunchArgs, debuggerType: DebuggerType, isFlutter: boolean, isAttach: boolean, isTest: boolean, device: Device | undefined, deviceManager: FlutterDeviceManager | undefined): Promise<void> {
 		const conf = config.for(folder?.uri);
 
+		const isDartNative = this.wsContext.hasAnyDartNativeProjects
+			|| (debugConfig.cwd && isDartNativeProjectFolder(debugConfig.cwd))
+			|| (folder && isDartNativeProjectFolder(fsPath(folder.uri)));
+
 		if (!debugConfig.name)
-			debugConfig.name = isFlutter ? "Flutter" : "Dart";
+			debugConfig.name = isDartNative ? "DartNative" : isFlutter ? "Flutter" : "Dart";
 
 		if (isFlutter && device) {
 			const deviceLabel = deviceManager ? deviceManager.labelForDevice(device) : device.name;
@@ -692,9 +712,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
 				break;
 		}
 
-		const licenseKey = config.dartNativeLicenseKey?.trim();
-		if (licenseKey && !args.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
-			args.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
+		if (debuggerType === DebuggerType.Flutter) {
+			const licenseKey = config.dartNativeLicenseKey?.trim();
+			if (licenseKey && !args.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
+				args.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
+			}
 		}
 
 		return args;

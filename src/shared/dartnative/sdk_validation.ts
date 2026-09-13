@@ -9,9 +9,17 @@ export interface ValidationResult {
 	sdkPath?: string;
 }
 
+function hasDnExecutable(dir: string): boolean {
+	const binDn = path.join(dir, executableNames.dn);
+	const binDnUnix = path.join(dir, "dn");
+	const binDnBat = path.join(dir, "dn.bat");
+	const binDnExe = path.join(dir, "dn.exe");
+	return existsAndIsFileSync(binDn) || existsAndIsFileSync(binDnUnix) || existsAndIsFileSync(binDnBat) || existsAndIsFileSync(binDnExe);
+}
+
 /**
  * Validates whether the given folder path points to a valid DartNative SDK
- * containing the `dn` executable in `bin/`.
+ * containing the `dn` executable in `bin/` or in the selected folder itself (e.g. when user selects `bin`).
  */
 export function validateDartNativeSdkFolder(folder: string): ValidationResult {
 	if (!folder?.trim())
@@ -21,21 +29,27 @@ export function validateDartNativeSdkFolder(folder: string): ValidationResult {
 	if (!existsAndIsDirectorySync(resolvedFolder))
 		return { valid: false, reason: `The directory does not exist: ${resolvedFolder}` };
 
-	// Check for bin/dn executable.
-	const binDn = path.join(resolvedFolder, "bin", executableNames.dn);
-	const binDnUnix = path.join(resolvedFolder, "bin", "dn");
-	const binDnBat = path.join(resolvedFolder, "bin", "dn.bat");
-	const binDnExe = path.join(resolvedFolder, "bin", "dn.exe");
-
-	if (!existsAndIsFileSync(binDn) && !existsAndIsFileSync(binDnUnix) && !existsAndIsFileSync(binDnBat) && !existsAndIsFileSync(binDnExe)) {
+	// 1. Check for bin/dn within the selected folder (standard SDK root selected).
+	if (hasDnExecutable(path.join(resolvedFolder, "bin"))) {
 		return {
-			reason: `The selected folder "${resolvedFolder}" does not contain a valid DartNative SDK: could not find "bin/dn".`,
-			valid: false,
+			sdkPath: resolvedFolder,
+			valid: true,
+		};
+	}
+
+	// 2. Check for dn directly within the selected folder (case where user selects the bin folder itself).
+	if (hasDnExecutable(resolvedFolder)) {
+		const isBinDir = path.basename(resolvedFolder).toLowerCase() === "bin";
+		const sdkPath = isBinDir ? path.dirname(resolvedFolder) : resolvedFolder;
+		return {
+			sdkPath,
+			valid: true,
 		};
 	}
 
 	return {
-		sdkPath: resolvedFolder,
-		valid: true,
+		reason: `The selected folder "${resolvedFolder}" does not contain a valid DartNative SDK: could not find "bin/dn" or "dn".`,
+		valid: false,
 	};
 }
+

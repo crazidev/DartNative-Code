@@ -33,7 +33,6 @@
 		"flutter.packages.upgrade": "Upgrade Packages",
 		"flutter.packages.upgrade.majorVersions": "Upgrade Packages (--major-versions)",
 		"flutter.packages.outdated": "List Outdated Packages",
-		"flutter.addSdkToPath": "Add SDK to PATH",
 		"flutter.hotReload": "Hot Reload",
 		"flutter.hotRestart": "Hot Restart",
 		"flutter.screenshot": "Save Screenshot",
@@ -80,6 +79,10 @@
 			"contextualTitle": "Dart Native: Logging"
 		}
 	},
+	"removedCommands": [
+		"dart.addSdkToPath",
+		"flutter.addSdkToPath"
+	],
 	"disabledCommands": [
 		"flutter.upgrade",
 		"flutter.task.genl10n",
@@ -281,7 +284,13 @@
 					"string"
 				],
 				"default": null,
-				"markdownDescription": "The DartNative license key. When configured, this is passed to DartNative CLI commands (`dn run`, `dn pub get`, `dn test`, etc.) as `--dart-define=DN_LICENSE_KEY=<key>`.",
+				"markdownDescription": "The DartNative license key. When configured, this is exported as the environment variable `DN_LICENSE_KEY` and passed to `dn run` as `--dart-define=DN_LICENSE_KEY=<key>`.",
+				"scope": "window"
+			},
+			"dart.showCommandsWhenSdkMissing": {
+				"type": "boolean",
+				"default": false,
+				"markdownDescription": "Whether to show other commands (such as Get Packages) in the command palette when the DartNative SDK is missing or not configured.",
 				"scope": "window"
 			}
 		}
@@ -301,6 +310,23 @@
 			"command": "dartnative.addSdkToPath",
 			"title": "Add SDK to PATH",
 			"category": "DartNative"
+		}
+	],
+	"activationEvents": [
+		"onCommand:dart.locateDartNativeSdk",
+		"onCommand:dart.setDartNativeLicenseKey",
+		"onCommand:dartnative.addSdkToPath",
+		"onCommand:dart.getPackages",
+		"onCommand:dart.getPackages.all",
+		"onCommand:pub.get",
+		"onCommand:pub.get.all",
+		"onCommand:flutter.packages.get",
+		"onCommand:flutter.packages.get.all"
+	],
+	"commandPalette": [
+		{
+			"command": "dartnative.addSdkToPath",
+			"when": "dart-code:anyFlutterProjectLoaded"
 		}
 	],
 	"settingPrefixRename": {

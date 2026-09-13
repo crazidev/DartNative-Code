@@ -124,8 +124,8 @@ dependencies:
 			assert.equal(pubspecContentReferencesDartNative(normalPubspec), false);
 		});
 
-		it("appends --dart-define=DN_LICENSE_KEY=<key> when licenseKey is provided", () => {
-			const result = buildDartNativeCliArgs({
+		it("appends --dart-define=DN_LICENSE_KEY=<key> only when subcommand is run", () => {
+			const runResult = buildDartNativeCliArgs({
 				folder: tempDnDir,
 				executionArgs: ["run", "-d", "macos"],
 				globalAdditionalArgs: [],
@@ -134,14 +134,30 @@ dependencies:
 				licenseKey: "my_secret_key_123",
 			});
 
-			assert.equal(result.isDartNative, true);
-			assert.ok(result.args.includes("--dart-define=DN_LICENSE_KEY=my_secret_key_123"));
-			assert.deepEqual(result.args, [
-				"run",
-				"-d",
-				"macos",
-				"--dart-define=DN_LICENSE_KEY=my_secret_key_123",
-			]);
+			assert.equal(runResult.isDartNative, true);
+			assert.ok(runResult.args.includes("--dart-define=DN_LICENSE_KEY=my_secret_key_123"));
+
+			// pub commands should NOT include --dart-define=DN_LICENSE_KEY
+			const pubResult = buildDartNativeCliArgs({
+				folder: tempDnDir,
+				executionArgs: ["pub", "get"],
+				globalAdditionalArgs: [],
+				runAdditionalArgs: [],
+				testAdditionalArgs: [],
+				licenseKey: "my_secret_key_123",
+			});
+			assert.equal(pubResult.args.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY=")), false);
+
+			// test commands should NOT include --dart-define=DN_LICENSE_KEY
+			const testResult = buildDartNativeCliArgs({
+				folder: tempDnDir,
+				executionArgs: ["test"],
+				globalAdditionalArgs: [],
+				runAdditionalArgs: [],
+				testAdditionalArgs: [],
+				licenseKey: "my_secret_key_123",
+			});
+			assert.equal(testResult.args.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY=")), false);
 		});
 
 		it("does not duplicate --dart-define=DN_LICENSE_KEY if already in args", () => {

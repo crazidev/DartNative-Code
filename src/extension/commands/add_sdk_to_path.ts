@@ -7,14 +7,29 @@ import { IAmDisposable, Logger } from "../../shared/interfaces";
 import { disposeAll } from "../../shared/utils";
 import { envUtils } from "../../shared/vscode/utils";
 import { WorkspaceContext } from "../../shared/workspace";
+import { validateDartNativeSdkFolder } from "../../shared/dartnative/sdk_validation";
 import { AddSdkToPathResult, Analytics } from "../analytics";
+import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
 import { runToolProcess } from "../utils/processes";
 
 export class AddSdkToPath {
-	constructor(private readonly logger: Logger, private readonly context: vs.ExtensionContext, private readonly analytics: Analytics) { }
+	constructor(protected readonly logger: Logger, protected readonly context: vs.ExtensionContext, protected readonly analytics: Analytics, protected readonly wsContext?: WorkspaceContext) { }
 
 	public async addToPath(sdkType: SdkTypeString, sdkPath: string | undefined): Promise<void> {
-		if (!sdkPath) {
+		const isDartNative = sdkType === "DartNative" || !!this.wsContext?.hasAnyDartNativeProjects;
+		if (isDartNative) {
+			if (!sdkPath) {
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK before adding it to PATH.", "dartnative.addSdkToPath");
+				return;
+			}
+			const validation = validateDartNativeSdkFolder(sdkPath);
+			if (!validation.valid || !validation.sdkPath) {
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK before adding it to PATH.", "dartnative.addSdkToPath");
+				return;
+			}
+			sdkPath = validation.sdkPath;
+			sdkType = "DartNative";
+		} else if (!sdkPath) {
 			void vs.window.showErrorMessage(noSdkAvailablePrompt);
 			return;
 		}
@@ -158,28 +173,12 @@ export class AddSdkToPathCommands extends AddSdkToPath implements IAmDisposable 
 	private disposables: IAmDisposable[] = [];
 
 	constructor(logger: Logger, context: vs.ExtensionContext, wsContext: WorkspaceContext, analytics: Analytics) {
-		super(logger, context, analytics);
-		const isDartNative = () => {
-			const flutterSdk = wsContext.sdks.flutter;
-			return !!(flutterSdk && (
-				fs.existsSync(path.join(flutterSdk, "bin", "dn"))
-				|| fs.existsSync(path.join(flutterSdk, "bin", "dn.bat"))
-			));
-		};
+		super(logger, context, analytics, wsContext);
 
-		this.disposables.push(vs.commands.registerCommand("dart.addSdkToPath", async () => {
-			if (wsContext.sdks.dartSdkIsFromFlutter) {
-				return vs.commands.executeCommand("flutter.addSdkToPath");
-			}
-			await this.addToPath("Dart", wsContext.sdks.dart);
-		}));
-		this.disposables.push(vs.commands.registerCommand("flutter.addSdkToPath", async () => {
-			const sdkType: SdkTypeString = isDartNative() ? "DartNative" : "Flutter";
-			await this.addToPath(sdkType, wsContext.sdks.flutter);
-		}));
 		this.disposables.push(vs.commands.registerCommand("dartnative.addSdkToPath", async () => {
 			await this.addToPath("DartNative", wsContext.sdks.flutter);
 		}));
+		this.disposables.push(vs.commands.registerCommand("flutter.addSdkToPath", () => vs.commands.executeCommand("dartnative.addSdkToPath")));
 	}
 
 	public dispose(): void {

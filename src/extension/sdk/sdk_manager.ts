@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vs from "vscode";
-import { dartVMPath, executableNames, flutterPath } from "../../shared/constants";
+import { dartVMPath, executableNames } from "../../shared/constants";
 import { Logger, Sdks } from "../../shared/interfaces";
 import { versionIsAtLeast } from "../../shared/utils";
 import { existsAndIsFileSync, getChildFolders, getSdkVersion, homeRelativePath, safeRealpathSync } from "../../shared/utils/fs";
@@ -121,12 +121,10 @@ export class FlutterSdkManager extends SdkManager {
 	protected get currentSdk(): string | undefined { return this.sdks.flutter; }
 	protected get configuredSdk(): string | undefined { return config.dartNativeSdkPath; }
 	protected get configName(): string { return "dartx.dartNativeSdkPaths"; }
-	// Used as a fallback executable to determine SDK folders; dn is preferred.
-	protected get executablePath() { return flutterPath; }
+	protected get executablePath() { return path.join("bin", executableNames.dn); }
 	protected isSdkFolder(folder: string): boolean {
-		// Accept either bin/dn or bin/flutter as evidence of a DartNative SDK.
 		return existsAndIsFileSync(path.join(folder, "bin", executableNames.dn))
-			|| existsAndIsFileSync(path.join(folder, flutterPath));
+			|| existsAndIsFileSync(path.join(folder, executableNames.dn));
 	}
 	protected getLabel(version: string) {
 		return `DartNative SDK ${version}`;

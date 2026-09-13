@@ -1,3 +1,4 @@
+import * as path from "path";
 import { ConfigurationTarget, Uri, workspace, WorkspaceConfiguration } from "vscode";
 import { CustomDevToolsConfig, GetSDKCommandConfig } from "../shared/interfaces";
 import { NullAsUndefined, nullToUndefined } from "../shared/utils";
@@ -190,7 +191,12 @@ class Config {
 	}
 	get flutterRememberSelectedDevice(): boolean { return this.getConfig<boolean>("flutterRememberSelectedDevice", true); }
 	get flutterScreenshotPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterScreenshotPath", null)); }
-	get flutterSdkPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterSdkPath", null)); }
+	get flutterSdkPath(): undefined | string {
+		const raw = resolvePaths(this.getConfig<null | string>("flutterSdkPath", null));
+		if (raw && path.basename(raw).toLowerCase() === "bin")
+			return path.dirname(raw);
+		return raw;
+	}
 	get flutterSdkPaths(): string[] { return this.getConfig<string[]>("flutterSdkPaths", []).map(resolvePaths); }
 	get flutterSelectDeviceWhenConnected(): boolean { return this.getConfig<boolean>("flutterSelectDeviceWhenConnected", true); }
 	get flutterShowEmulators(): "local" | "always" | "never" { return this.getConfig<"local" | "always" | "never">("flutterShowEmulators", "local"); }
@@ -286,6 +292,7 @@ class Config {
 	get dartNativeTestAdditionalArgs(): string[] { return this.for().dartNativeTestAdditionalArgs; }
 
 	get dartNativeLicenseKey(): undefined | string { return this.getConfig<null | string>("dartNativeLicenseKey", null); }
+	get showCommandsWhenSdkMissing(): boolean { return this.getConfig<boolean>("showCommandsWhenSdkMissing", false); }
 
 	// Options that can be set programatically.
 	public setDartNativeLicenseKey(value: string | undefined, target: ConfigurationTarget): Promise<void> { return this.setConfig("dartNativeLicenseKey", value, target); }
@@ -425,6 +432,7 @@ export class ResourceConfig {
 	get toolingDaemonLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("toolingDaemonLogFile", null)))); }
 	get vmAdditionalArgs(): string[] { return this.getConfig<string[]>("vmAdditionalArgs", []); }
 	get webDaemonLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("webDaemonLogFile", null)))); }
+	get showCommandsWhenSdkMissing(): boolean { return this.getConfig<boolean>("showCommandsWhenSdkMissing", false); }
 }
 
 export const config = new Config();

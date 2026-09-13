@@ -1,10 +1,11 @@
+import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as process from "process";
 import * as vs from "vscode";
 import { DartCapabilities } from "../shared/capabilities/dart";
 import { FlutterCapabilities } from "../shared/capabilities/flutter";
-import { ExtensionRestartReason, dartCodeConfigurationPathEnvironmentVariableName, dartPlatformName, defaultDartCodeConfigurationPath, flutterExtensionIdentifier, isDartCodeTestRun, isMac, platformDisplayName, setFlutterDev, showLogAction } from "../shared/constants";
+import { ExtensionRestartReason, dartCodeConfigurationPathEnvironmentVariableName, dartPlatformName, defaultDartCodeConfigurationPath, executableNames, flutterExtensionIdentifier, isDartCodeTestRun, isMac, platformDisplayName, setFlutterDev, showLogAction } from "../shared/constants";
 import { DART_PLATFORM_NAME, DART_PROJECT_LOADED, FLUTTER_PROJECT_LOADED, FLUTTER_PROPERTY_EDITOR_SUPPORTED_CONTEXT, FLUTTER_SUPPORTS_ATTACH, GO_TO_IMPORTS_SUPPORTED_CONTEXT, IS_RUNNING_LOCALLY_CONTEXT, OBSERVATORY_SUPPORTED_CONTEXT, PROJECT_LOADED, SDK_IS_PRE_RELEASE, WEB_PROJECT_LOADED } from "../shared/constants.contexts";
 import { LogCategory } from "../shared/enums";
 import { WebClient } from "../shared/fetch";
@@ -144,6 +145,7 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	// Clear any caches, for example projects that we detected. We might be reloading because
 	// a Flutter project was added to a Dart-only workspace.
 	clearCaches();
+	config.reload();
 
 	void vs.commands.executeCommand("setContext", IS_RUNNING_LOCALLY_CONTEXT, isRunningLocally);
 	buildLogHeaders();
@@ -165,6 +167,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 		logger.info("Done reloading extension!");
 	}));
 
+	const workspaceContextHolder: { current?: WorkspaceContext } = {};
+
+	// Commands that must be available unconditionally, even before SDKs are found or if SDKs are missing.
+	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
+	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, workspaceContextHolder.current?.sdks)));
+
 	// Configure if using flutter-dev.
 	setFlutterDev(config.useFlutterDev);
 
@@ -174,19 +182,31 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	analytics = new Analytics(logger);
 
 	// Helper to set the tool env using current analytics/env settings.
-	const setEnvHelper = () => setupToolEnv({ suppressAnalytics: analytics.isSuppressed, envOverrides: config.env });
+	const setEnvHelper = () => setupToolEnv({
+		envOverrides: config.env,
+		licenseKey: config.dartNativeLicenseKey,
+		suppressAnalytics: analytics.isSuppressed,
+	});
 	setEnvHelper(); // Set initial values.
 
 	// Rebuild toolEnv when related config changes. This needs to be set up before the SDK search, since it
 	// is what causes the config reload when the SDK paths are selected during "Locate SDK".
 	context.subscriptions.push(vs.workspace.onDidChangeConfiguration((e) => {
 		config.reload();
-		if (e.affectsConfiguration("dart.env") || e.affectsConfiguration("dart.allowAnalytics") || e.affectsConfiguration("telemetry.telemetryLevel"))
+		if (e.affectsConfiguration("dart.env") || e.affectsConfiguration("dart.allowAnalytics") || e.affectsConfiguration("telemetry.telemetryLevel") || e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartx.dartNativeLicenseKey"))
 			setEnvHelper();
+		if (e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartx.dartNativeLicenseKey"))
+			syncLicenseKeyEnv();
+		if (e.affectsConfiguration("dart.showCommandsWhenSdkMissing") || e.affectsConfiguration("dartx.showCommandsWhenSdkMissing")) {
+			const show = config.showCommandsWhenSdkMissing;
+			void vs.commands.executeCommand("setContext", PROJECT_LOADED, show);
+			void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, show);
+		}
 	}));
 
 	const sdkUtils = new SdkUtils(logger, context, analytics);
 	const workspaceContextUnverified = await sdkUtils.scanWorkspace();
+	workspaceContextHolder.current = workspaceContextUnverified;
 	extensionApiModel.setSdks(workspaceContextUnverified.sdks);
 	analytics.workspaceContext = workspaceContextUnverified;
 	setEnvHelper(); // analytics.workspaceContext could affect suppression.
@@ -199,7 +219,16 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	setupLog(config.toolingDaemonLogFile, LogCategory.DartToolingDaemon);
 	setupLog(config.devToolsLogFile, LogCategory.DevTools);
 
-	if (!workspaceContextUnverified.sdks.dart || (workspaceContextUnverified.hasAnyFlutterProjects && !workspaceContextUnverified.sdks.flutter)) {
+	const hasMissingDartNativeSdk = !config.dartNativeSdkPath
+		|| !workspaceContextUnverified.sdks.flutter
+		|| !fs.existsSync(path.join(workspaceContextUnverified.sdks.flutter, "bin", executableNames.dn));
+
+	if (!workspaceContextUnverified.sdks.dart || (workspaceContextUnverified.hasAnyFlutterProjects && !workspaceContextUnverified.sdks.flutter) || hasMissingDartNativeSdk) {
+		if (config.showCommandsWhenSdkMissing) {
+			setCommandVisiblity(true, workspaceContextUnverified);
+			void vs.commands.executeCommand("setContext", PROJECT_LOADED, true);
+			void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, true);
+		}
 		// Don't set anything else up; we can't work like this!
 		sdkUtils.handleMissingSdks(workspaceContextUnverified);
 		return;
@@ -254,8 +283,20 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 		// Since the value persists (which we want, so upon reload we don't miss
 		// any terminals that were already restored before we activated), we need
 		// to explicitly remove the path when the setting is disabled.
-		context.environmentVariableCollection.clear();
+		context.environmentVariableCollection.delete("PATH");
 	}
+
+	const syncLicenseKeyEnv = () => {
+		const key = config.dartNativeLicenseKey?.trim();
+		if (key) {
+			context.environmentVariableCollection.replace("DN_LICENSE_KEY", key);
+			process.env.DN_LICENSE_KEY = key;
+		} else {
+			context.environmentVariableCollection.delete("DN_LICENSE_KEY");
+			delete process.env.DN_LICENSE_KEY;
+		}
+	};
+	syncLicenseKeyEnv();
 
 	// TODO: Move these capabilities into WorkspaceContext.
 	if (sdks.dartVersion) {
@@ -365,8 +406,6 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	context.subscriptions.push(flutterCommands);
 	context.subscriptions.push(packageCommands);
 	context.subscriptions.push(addDependencyCommand);
-	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
-	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, sdks)));
 
 	// Handle new projects before creating the analyer to avoid a few issues with
 	// showing errors while packages are fetched, plus issues like
@@ -936,7 +975,7 @@ export async function deactivate(isRestart = false, reason: ExtensionRestartReas
 function setCommandVisiblity(enable: boolean, workspaceContext?: WorkspaceContext) {
 	void vs.commands.executeCommand("setContext", PROJECT_LOADED, enable);
 	void vs.commands.executeCommand("setContext", DART_PROJECT_LOADED, enable && workspaceContext?.hasAnyStandardDartProjects);
-	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && workspaceContext?.hasAnyFlutterProjects);
+	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && (workspaceContext?.hasAnyFlutterProjects || workspaceContext?.hasAnyDartNativeProjects));
 	void vs.commands.executeCommand("setContext", WEB_PROJECT_LOADED, enable && workspaceContext?.hasAnyWebProjects);
 }
 

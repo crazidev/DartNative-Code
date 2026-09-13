@@ -5,11 +5,12 @@ import * as vs from "vscode";
 import { DartCapabilities } from "../../shared/capabilities/dart";
 import { FlutterCapabilities } from "../../shared/capabilities/flutter";
 import { vsCodeVersion } from "../../shared/capabilities/vscode";
-import { CommandSource, defaultLaunchJson, ExtensionRestartReason, flutterCreateAvailablePlatforms, flutterCreateTemplatesSupportingPlatforms } from "../../shared/constants";
+import { CommandSource, defaultLaunchJson, executableNames, ExtensionRestartReason, flutterCreateAvailablePlatforms, flutterCreateTemplatesSupportingPlatforms } from "../../shared/constants";
 import { DartWorkspaceContext, FlutterCreateCommandArgs, FlutterCreateTriggerData, FlutterProjectTemplate, Logger } from "../../shared/interfaces";
 import { RunProcessResult } from "../../shared/processes";
 import { sortBy } from "../../shared/utils/array";
 import { stripMarkdown } from "../../shared/utils/dartdocs";
+import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
 import { fsPath, isFlutterProjectFolder, mkDirRecursive, nextAvailableFilename } from "../../shared/utils/fs";
 import { writeFlutterSdkSettingIntoProject, writeFlutterTriggerFile } from "../../shared/utils/projects";
 import { FlutterDeviceManager } from "../../shared/vscode/device_manager";
@@ -22,6 +23,7 @@ import { Context } from "../../shared/vscode/workspace";
 import { Analytics } from "../analytics";
 import { config } from "../config";
 import { getFlutterSnippets } from "../sdk/flutter_docs_snippets";
+import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
 import { SdkUtils } from "../sdk/utils";
 import * as util from "../utils";
 import { editSetting, showInputBoxWithSettings, showSimpleSettingsEditor } from "../utils/vscode/input";
@@ -146,6 +148,26 @@ export class FlutterCommands extends BaseSdkCommands {
 	}
 
 	public flutterDoctor(options?: { commandSource?: string }) {
+		const isDartNative = this.workspace.hasAnyDartNativeProjects
+			|| (this.workspace.firstFlutterProject && isDartNativeProjectFolder(this.workspace.firstFlutterProject))
+			|| (vs.workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
+			|| !!config.dartNativeSdkPath;
+
+		if (isDartNative) {
+			const dnBinary = this.workspace.sdks.flutter ? path.join(this.workspace.sdks.flutter, "bin", executableNames.dn) : undefined;
+			if (!dnBinary || !fs.existsSync(dnBinary)) {
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to run doctor.", "flutter.doctor");
+				return;
+			}
+
+			this.analytics.logFlutterDoctor(options?.commandSource);
+
+			const tempDir = path.join(os.tmpdir(), "dart-code-cmd-run");
+			if (!fs.existsSync(tempDir))
+				fs.mkdirSync(tempDir);
+			return this.runFlutterInFolder(tempDir, ["doctor", "-v"], "DartNative", true, undefined, this.workspace.config?.flutterDoctorScript);
+		}
+
 		if (!this.workspace.sdks.flutter) {
 			this.sdkUtils.showFlutterActivationFailure("flutter.doctor");
 			return;
@@ -160,6 +182,27 @@ export class FlutterCommands extends BaseSdkCommands {
 	}
 
 	private async flutterUpgrade() {
+		const isDartNative = this.workspace.hasAnyDartNativeProjects
+			|| (this.workspace.firstFlutterProject && isDartNativeProjectFolder(this.workspace.firstFlutterProject))
+			|| (vs.workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
+			|| !!config.dartNativeSdkPath;
+
+		if (isDartNative) {
+			const dnBinary = this.workspace.sdks.flutter ? path.join(this.workspace.sdks.flutter, "bin", executableNames.dn) : undefined;
+			if (!dnBinary || !fs.existsSync(dnBinary)) {
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK to upgrade.", "flutter.upgrade");
+				return;
+			}
+
+			commandState.promptToReloadOnVersionChanges = false;
+			const tempDir = path.join(os.tmpdir(), "dart-code-cmd-run");
+			if (!fs.existsSync(tempDir))
+				fs.mkdirSync(tempDir);
+			await this.runFlutterInFolder(tempDir, ["upgrade"], "DartNative", true);
+			await util.promptToReloadExtension(this.logger, { restartReason: ExtensionRestartReason.AfterFlutterUpgrade });
+			return;
+		}
+
 		if (!this.workspace.sdks.flutter) {
 			this.sdkUtils.showFlutterActivationFailure("flutter.upgrade");
 			return;

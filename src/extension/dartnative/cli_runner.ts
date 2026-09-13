@@ -100,9 +100,10 @@ export function buildDartNativeCliArgs(options: {
 	result.push(...executionArgs);
 	result.push(...dedupe(pubArgs, result));
 
-	// If license key is provided and not already defined, append --dart-define=DN_LICENSE_KEY=<key>.
+	// If license key is provided and subcommand is "run", append --dart-define=DN_LICENSE_KEY=<key>.
+	// Only "run" supports --dart-define=DN_LICENSE_KEY for now; packages CLI (pub) does not.
 	const key = licenseKey?.trim();
-	if (key && !result.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
+	if (subcommand === "run" && key && !result.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
 		result.push(`--dart-define=DN_LICENSE_KEY=${key}`);
 	}
 
