@@ -1156,6 +1156,60 @@ index 4bc3697d..501254d5 100644
  		setEnvHelper(); // Update
  	}
  
+diff --git a/src/extension/flutter/daemon_message_handler.ts b/src/extension/flutter/daemon_message_handler.ts
+index 38a96f60..6d7ff37e 100644
+--- a/src/extension/flutter/daemon_message_handler.ts
++++ b/src/extension/flutter/daemon_message_handler.ts
+@@ -1,45 +1,19 @@
+ import { ExtensionContext, window } from "vscode";
++import { LogCategory } from "../../shared/enums";
+ import { DaemonLog, DaemonLogMessage, ShowMessage } from "../../shared/flutter/daemon_interfaces";
+ import { IFlutterDaemon, Logger } from "../../shared/interfaces";
+-import { getOutputChannel } from "../commands/channels";
+ 
+ export function setUpDaemonMessageHandler(logger: Logger, context: ExtensionContext, daemon: IFlutterDaemon) {
+-	function showShouldOutput(log: DaemonLog | DaemonLogMessage): boolean {
+-		const isError = "error" in log ? log.error : log.level === "error";
+-		if (!isError)
+-			return false;
+-
+-		const message = "error" in log ? log.log : log.message;
+-
+-		// The daemon reports lots of errors during normal operation, so we only
+-		// show the error for some specific known things.
+-		const knownErrorStrings = [
+-			"Android emulator stderr",
+-			"Address these issues and try again",
+-			"requires hardware acceleration",
+-			// If we ever need to add to this list, consider updating Flutter to pass
+-			// some flag to separate errors that should be shown to users from those
+-			// that are normal (for example adb errors are printed normally during
+-			// a device connection).
+-		];
+-		return !!knownErrorStrings.find((s) => message.includes(s));
+-	}
+-
+-	const channel = getOutputChannel("flutter daemon", true);
+ 	context.subscriptions.push(daemon.registerForDaemonLog((l: DaemonLog) => {
+-		if (showShouldOutput(l))
+-			channel.show(true);
+ 		const prefix = l.error ? "[ERR] " : "";
+-		channel.appendLine(`${prefix}${l.log}`);
++		logger.info(`${prefix}${l.log}`, LogCategory.FlutterDaemon);
+ 	}));
+ 	context.subscriptions.push(daemon.registerForDaemonLogMessage((l: DaemonLogMessage) => {
+-		if (showShouldOutput(l))
+-			channel.show(true);
+ 		const prefix = l.level === "error"
+ 			? "[ERR] "
+ 			: l.level === "warning"
+-				? "[WARN]" : "";
+-		channel.appendLine(`${prefix}${l.message}`);
++				? "[WARN] " : "";
++		logger.info(`${prefix}${l.message}`, LogCategory.FlutterDaemon);
+ 	}));
+ 	context.subscriptions.push(daemon.registerForDaemonShowMessage((l: ShowMessage) => {
+ 		const title = l.title.trim().endsWith(".") ? l.title.trim() : `${l.title.trim()}.`;
 diff --git a/src/extension/providers/debug_adapter_descriptor_factory.ts b/src/extension/providers/debug_adapter_descriptor_factory.ts
 index bdb69fa6..27eb416c 100644
 --- a/src/extension/providers/debug_adapter_descriptor_factory.ts
@@ -1447,6 +1501,51 @@ index 83d57f88..218eee28 100644
  		};
  	}
  
+diff --git a/src/extension/sdk/flutter.ts b/src/extension/sdk/flutter.ts
+index 22ab8d09..7d5c6a95 100644
+--- a/src/extension/sdk/flutter.ts
++++ b/src/extension/sdk/flutter.ts
+@@ -20,7 +20,7 @@ import { safeToolSpawn } from "../utils/processes";
+  * update/replace, causing a crash.
+  */
+ export async function ensureFlutterInitialized(logger: Logger, flutterScript: string): Promise<void> {
+-	logger.info("Running 'flutter --help' to ensure the Flutter SDK is initialized");
++	logger.info("Running 'flutter --help' to ensure the DartNative SDK is initialized");
+ 	const cancellationTokenSource = new CancellationTokenSource();
+ 	try {
+ 		await withProgressIfSlow(
+@@ -29,9 +29,9 @@ export async function ensureFlutterInitialized(logger: Logger, flutterScript: st
+ 			initializingFlutterMessage,
+ 			{ showAfterMs: fiveSecondsInMs },
+ 		);
+-		logger.info(`Flutter initialized!`);
++		logger.info(`DartNative initialized!`);
+ 	} catch (e) {
+-		logger.warn(`Flutter initialization failed, proceeding without! ${e}`);
++		logger.warn(`DartNative initialization failed, proceeding without! ${e}`);
+ 	} finally {
+ 		cancellationTokenSource.dispose();
+ 	}
+@@ -45,7 +45,7 @@ function runFlutterHelp(logger: Logger, flutterScript: string, cancellationToken
+ 	const proc = safeToolSpawn(undefined, flutterScript, ["--suppress-analytics", "--help"]);
+ 
+ 	// Show the output in an output channel so if it gets stuck the user can see it.
+-	const channel = channels.getOutputChannel(`flutter initialization`);
++	const channel = channels.getOutputChannel(`DartNative initializating`);
+ 	channels.runProcessInOutputChannel(proc, channel);
+ 
+ 	cancellationToken.onCancellationRequested(() => {
+@@ -61,8 +61,8 @@ function runFlutterHelp(logger: Logger, flutterScript: string, cancellationToken
+ 			channel.show();
+ 			const ringLogContents = ringLog.toString();
+ 			const message = cancellationToken.isCancellationRequested
+-				? `Flutter initialization was cancelled.`
+-				: `Failed to initialize Flutter: Process exited with code ${code}.`;
++				? `DartNative initialization was cancelled.`
++				: `Failed to initialize DartNative: Process exited with code ${code}.`;
+ 			logger.error(message);
+ 			void window.showErrorMessage(message, showLogAction).then((chosenAction) => {
+ 				if (chosenAction === showLogAction)
 diff --git a/src/extension/sdk/sdk_manager.ts b/src/extension/sdk/sdk_manager.ts
 index db388a99..4860fafd 100644
 --- a/src/extension/sdk/sdk_manager.ts
@@ -1867,7 +1966,7 @@ index 439fbec4..26a63019 100644
  	get pageRoute(): string {
  		return "editorSidebar";
 diff --git a/src/shared/constants.ts b/src/shared/constants.ts
-index e4b76a80..bb678c9e 100644
+index e4b76a80..078e3ad5 100644
 --- a/src/shared/constants.ts
 +++ b/src/shared/constants.ts
 @@ -4,7 +4,7 @@ import { versionIsAtLeast } from "./utils";
@@ -1887,6 +1986,15 @@ index e4b76a80..bb678c9e 100644
  	flutter: isWin ? "flutter.bat" : "flutter",
  	flutterDev: isWin ? "flutter-dev.bat" : "flutter-dev",
  	pub: isWin ? "pub.bat" : "pub",
+@@ -131,7 +132,7 @@ export const addToPathInstructionsUrl = isWin
+ 			: undefined;
+ 
+ export const modifyingFilesOutsideWorkspaceInfoUrl = "https://dartcode.org/docs/modifying-files-outside-workspace/";
+-export const initializingFlutterMessage = "Initializing the Flutter SDK. This could take a few minutes.";
++export const initializingFlutterMessage = "Initializing the DartNative SDK. This could take a few minutes.";
+ export const cloningFlutterMessage = "Downloading the Flutter SDK. This could take a few minutes.";
+ 
+ 
 @@ -258,7 +259,7 @@ export const defaultLaunchJson = JSON.stringify(
  	{
  		configurations: [
@@ -2013,6 +2121,25 @@ index 681c1b1d..d63730e3 100644
  });
  
  
+diff --git a/src/test/flutter_create_tests/flutter_create.test.ts b/src/test/flutter_create_tests/flutter_create.test.ts
+index 6d42bf29..7f57debd 100644
+--- a/src/test/flutter_create_tests/flutter_create.test.ts
++++ b/src/test/flutter_create_tests/flutter_create.test.ts
+@@ -61,13 +61,12 @@ describe("flutter", () => {
+ 
+ 		const channels = privateApi.getOutputChannelNames();
+ 		assert.deepStrictEqual(channels, [
++			"DartNative initializating",
+ 			"flutter (package:flutter_create_basic)",
+ 			"flutter (package:flutter_create_module)",
+ 			"flutter (package:flutter_create_package)",
+ 			"flutter (package:flutter_create_plugin)",
+ 			"flutter (package:sample (flutter_create_sample))",
+-			"flutter daemon",
+-			"flutter initialization",
+ 		]);
+ 	});
+ });
 diff --git a/tsconfig.build.json b/tsconfig.build.json
 index f4dbb6ec..8f96b050 100644
 --- a/tsconfig.build.json
