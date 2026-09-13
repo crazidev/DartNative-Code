@@ -1162,10 +1162,26 @@ index 71877abe..32b4181d 100644
  	get insertArgumentPlaceholders(): boolean { return this.getConfig<boolean>("insertArgumentPlaceholders", true); }
  	get lineLength(): number { return this.getConfig<number>("lineLength", 80); }
 diff --git a/src/extension/extension.ts b/src/extension/extension.ts
-index 4bc3697d..501254d5 100644
+index 4bc3697d..8bd65456 100644
 --- a/src/extension/extension.ts
 +++ b/src/extension/extension.ts
-@@ -93,7 +93,7 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
+@@ -52,6 +52,7 @@ import { PackageCommands } from "./commands/packages";
+ import { SdkCommands } from "./commands/sdk";
+ import { SettingsCommands } from "./commands/settings";
+ import { TestCommands, isInImplementationFileThatCanHaveTest, isInTestFileThatHasImplementation } from "./commands/test";
++import { WidgetRefactorCommands } from "./commands/widget_refactors";
+ import { config } from "./config";
+ import { DartTaskProvider } from "./dart/dart_task_provider";
+ import { HotReloadOnSaveHandler } from "./dart/hot_reload_save_handler";
+@@ -82,6 +83,7 @@ import { DartDebugAdapterRemoveErrorShowUserFactory } from "./providers/debug_ad
+ import { DebugConfigProvider, DynamicDebugConfigProvider, InitialLaunchJsonDebugConfigProvider } from "./providers/debug_config_provider";
+ import { DartMcpServerDefinitionProvider } from "./providers/mcp_server_definition_provider";
+ import { SnippetCompletionItemProvider } from "./providers/snippet_completion_item_provider";
++import { WidgetCodeActionProvider } from "./providers/widget_code_action_provider";
+ import { PubGlobal } from "./pub/global";
+ import { ExtensionRecommentations } from "./recommendations/recommendations";
+ import { DevToolsManager } from "./sdk/dev_tools/manager";
+@@ -93,7 +95,7 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
  import * as util from "./utils";
  import { promptToReloadExtension } from "./utils";
  import { addToLogHeader, clearLogHeader, getExtensionLogPath, getLogHeader } from "./utils/log";
@@ -1174,7 +1190,7 @@ index 4bc3697d..501254d5 100644
  import { FlutterPostMessageSidebar } from "./views/devtools/legacy_post_message_sidebar/sidebar";
  import { PropertyEditor } from "./views/devtools/property_editor";
  import { FlutterDtdSidebar } from "./views/devtools/sidebar";
-@@ -211,9 +211,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -211,9 +213,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	void vs.commands.executeCommand("setContext", SDK_IS_PRE_RELEASE, sdks.isPreReleaseSdk);
  
  
@@ -1189,6 +1205,19 @@ index 4bc3697d..501254d5 100644
  		setEnvHelper(); // Update
  	}
  
+@@ -454,6 +460,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+ 	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/dart.json", () => true)));
+ 	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/flutter.json", (uri) => util.isInsideFlutterProject(uri))));
+ 
++	// Widget refactorings (Wrap with Padding/Center/etc., Extract Widget, Convert to StatefulWidget/StatelessWidget)
++	context.subscriptions.push(new WidgetRefactorCommands());
++	context.subscriptions.push(vs.languages.registerCodeActionsProvider(DART_MODE, new WidgetCodeActionProvider(), {
++		providedCodeActionKinds: WidgetCodeActionProvider.providedCodeActionKinds,
++	}));
++
+ 	context.subscriptions.push(DartLanguageConfiguration.register(DART_LANGUAGE));
+ 
+ 	context.subscriptions.push(new FileChangeWarnings());
 diff --git a/src/extension/flutter/daemon_message_handler.ts b/src/extension/flutter/daemon_message_handler.ts
 index 38a96f60..6d7ff37e 100644
 --- a/src/extension/flutter/daemon_message_handler.ts
