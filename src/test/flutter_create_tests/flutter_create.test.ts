@@ -61,13 +61,12 @@ describe("flutter", () => {
 
 		const channels = privateApi.getOutputChannelNames();
 		assert.deepStrictEqual(channels, [
+			"DartNative initializating",
 			"flutter (package:flutter_create_basic)",
 			"flutter (package:flutter_create_module)",
 			"flutter (package:flutter_create_package)",
 			"flutter (package:flutter_create_plugin)",
 			"flutter (package:sample (flutter_create_sample))",
-			"flutter daemon",
-			"flutter initialization",
 		]);
 	});
 });

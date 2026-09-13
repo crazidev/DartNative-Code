@@ -220,6 +220,35 @@ export function isFlutterProjectFolder(folder?: string): boolean {
 	return projectReferencesFlutter(folder);
 }
 
+export function isDartNativeProjectFolder(folder?: string): boolean {
+	return projectReferencesDartNative(folder);
+}
+
+export function projectReferencesDartNative(folder?: string): boolean {
+	if (folder && hasPubspec(folder)) {
+		const pubspecPath = path.join(folder, "pubspec.yaml");
+		try {
+			const pubspecContent = fs.readFileSync(pubspecPath);
+			return pubspecContentReferencesDartNative(pubspecContent.toString());
+		} catch (e: any) {
+			if (e?.code !== "ENOENT") // Don't warn for missing files.
+				console.warn(`Failed to read ${pubspecPath}: ${e}`);
+		}
+	}
+	return false;
+}
+
+export function pubspecContentReferencesDartNative(content: string): boolean {
+	if (!content.includes("dartnative"))
+		return false;
+	try {
+		const yaml = YAML.parse(content);
+		return !!(yaml?.dependencies?.dartnative || yaml?.dartnative);
+	} catch {
+		return false;
+	}
+}
+
 export function projectReferencesFlutter(folder?: string): boolean {
 	if (folder && hasPubspec(folder)) {
 		const pubspecPath = path.join(folder, "pubspec.yaml");
@@ -236,7 +265,7 @@ export function projectReferencesFlutter(folder?: string): boolean {
 
 export function pubspecContentReferencesFlutter(content: string): boolean {
 	// Do a fast string check first, because YAML parse can be slow in comparison.
-	if (!content.includes("flutter"))
+	if (!content.includes("flutter") && !content.includes("dartnative"))
 		return false;
 	try {
 		const yaml = YAML.parse(content);
@@ -249,6 +278,9 @@ export function pubspecContentReferencesFlutter(content: string): boolean {
 			|| yaml?.dev_dependencies?.flutter_test
 			|| yaml?.dependencies?.flutter_goldens
 			|| yaml?.dev_dependencies?.flutter_goldens
+
+			|| yaml?.dependencies?.dartnative
+			|| yaml?.dartnative
 		);
 	} catch {
 		return false;

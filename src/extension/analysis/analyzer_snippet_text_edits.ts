@@ -97,6 +97,8 @@ export class SnippetTextEditFeature implements IAmDisposable {
 
 		const snippet = new vs.SnippetString(edit.newText);
 		await editor.insertSnippet(snippet, edit.range, { keepWhitespace: true, undoStopBefore: true, undoStopAfter: true });
+		if (config.formatAfterRefactoring)
+			void vs.commands.executeCommand("_dart.formatDocument");
 	}
 
 	public dispose(): void {

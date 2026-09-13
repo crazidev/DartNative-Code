@@ -1,10 +1,9 @@
 import * as vs from "vscode";
-import { ExtensionRestartReason, flutterExtensionIdentifier, noThanksAction } from "../../shared/constants";
+import { noThanksAction } from "../../shared/constants";
 import { Context } from "../../shared/vscode/workspace";
 
 import { Logger } from "../../shared/interfaces";
 import { Analytics, AnalyticsEvent } from "../analytics";
-import { promptToReloadExtension } from "../utils";
 import { ArbExtensionRecommentation } from "./arb";
 
 export class ExtensionRecommentations {
@@ -15,16 +14,6 @@ export class ExtensionRecommentations {
 	}
 
 	public async promptToInstallFlutterExtension(): Promise<boolean> {
-		const installExtension = "Install Flutter Extension";
-		const res = await vs.window.showInformationMessage(
-			"The Flutter extension is required to work with Flutter projects.",
-			installExtension,
-		);
-		if (res === installExtension) {
-			await this.installExtension(flutterExtensionIdentifier);
-			void promptToReloadExtension(this.logger, { restartReason: ExtensionRestartReason.AfterFlutterExtensionInstall });
-		}
-
 		return false;
 	}
 

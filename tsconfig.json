@@ -24,6 +24,7 @@
 		".vscode-test",
 		"node_modules",
 		"out",
+		"scripts",
 		"src/test/test_projects"
 		// tsconfig.build.json excludes additional paths
 	]

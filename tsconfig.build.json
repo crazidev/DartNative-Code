@@ -8,6 +8,7 @@
 		".vscode-test",
 		"node_modules",
 		"out",
+		"scripts",
 		"src/debug",
 		"src/extension",
 		"src/test/test_projects"

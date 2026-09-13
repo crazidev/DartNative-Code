@@ -22,3 +22,6 @@ logs/
 node_modules/
 out/
 pubspec.lock
+package.json.upstream
+.agents/
+skills-lock.json

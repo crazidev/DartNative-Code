@@ -8,7 +8,7 @@ import { ExtensionRestartReason, showLogAction } from "../shared/constants";
 import { BasicDebugConfiguration } from "../shared/debugging/interfaces";
 import { Logger, WorkspaceConfig } from "../shared/interfaces";
 import { filenameSafe } from "../shared/utils";
-import { existsAndIsDirectorySync, existsAndIsFileSync, fsPath, getRandomInt, hasPubspec, isFlutterProjectFolder } from "../shared/utils/fs";
+import { existsAndIsDirectorySync, existsAndIsFileSync, fsPath, getRandomInt, hasPubspec, isDartNativeProjectFolder, isFlutterProjectFolder } from "../shared/utils/fs";
 import { isWithinWorkspace, locateBestProjectRoot } from "../shared/vscode/project";
 import { isDartWorkspaceFolder } from "../shared/vscode/utils";
 import { config } from "./config";
@@ -16,6 +16,10 @@ import { ringLog } from "./extension";
 
 function isFlutterWorkspaceFolder(folder?: WorkspaceFolder): boolean {
 	return !!(folder && isDartWorkspaceFolder(folder) && isFlutterProjectFolder(fsPath(folder.uri)));
+}
+
+function isDartNativeWorkspaceFolder(folder?: WorkspaceFolder): boolean {
+	return !!(folder && isDartWorkspaceFolder(folder) && isDartNativeProjectFolder(fsPath(folder.uri)));
 }
 
 export function isInsideFlutterProject(uri?: Uri): boolean {
@@ -29,6 +33,17 @@ export function isInsideFlutterProject(uri?: Uri): boolean {
 		return isFlutterWorkspaceFolder(workspace.getWorkspaceFolder(uri));
 }
 
+export function isInsideDartNativeProject(uri?: Uri): boolean {
+	if (!uri)
+		return false;
+
+	const projectRoot = locateBestProjectRoot(fsPath(uri));
+	if (projectRoot)
+		return isDartNativeProjectFolder(projectRoot);
+	else
+		return isDartNativeWorkspaceFolder(workspace.getWorkspaceFolder(uri));
+}
+
 export function isPathInsideFlutterProject(path: string): boolean {
 	// TODO(dantup): This can be called quite a lot when discovering tests, so consider
 	//  maintaining a model for the workspace.
@@ -37,6 +52,14 @@ export function isPathInsideFlutterProject(path: string): boolean {
 		return false;
 
 	return isFlutterProjectFolder(projectRoot);
+}
+
+export function isPathInsideDartNativeProject(path: string): boolean {
+	const projectRoot = locateBestProjectRoot(path);
+	if (!projectRoot)
+		return false;
+
+	return isDartNativeProjectFolder(projectRoot);
 }
 
 export function insertSessionName(args: { name: string }, logPath: string | undefined) {

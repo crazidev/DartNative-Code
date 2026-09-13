@@ -4,7 +4,7 @@ import { extensions, MarkdownString, Uri } from "vscode";
 import { dartCodeExtensionIdentifier, flutterExtensionIdentifier } from "../constants";
 import * as dartdoc from "../utils/dartdocs";
 
-export const extensionPath = extensions.getExtension(dartCodeExtensionIdentifier)!.extensionPath;
+export const extensionPath = (extensions.getExtension(dartCodeExtensionIdentifier) ?? extensions.getExtension("Dart-Code.dart-code"))!.extensionPath;
 export const extensionVersion = getExtensionVersion();
 export const isPreReleaseExtension = checkIsPreReleaseExtension();
 export const isDevExtension = checkIsDevExtension();

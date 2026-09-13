@@ -25,7 +25,7 @@ export class FlutterDtdSidebar implements IAmDisposable {
 
 class MyWebViewProvider extends MySimpleBaseWebViewProvider {
 	get pageName(): string {
-		return "Flutter Sidebar";
+		return "Dart Native Sidebar";
 	}
 	get pageRoute(): string {
 		return "editorSidebar";

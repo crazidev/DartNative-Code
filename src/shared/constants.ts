@@ -4,7 +4,7 @@ import { versionIsAtLeast } from "./utils";
 
 export type SdkTypeString = "Dart" | "Flutter";
 
-export const dartCodeExtensionIdentifier = "Dart-Code.dart-code";
+export const dartCodeExtensionIdentifier = "Dart-Code.dartx";
 export const flutterExtensionIdentifier = "Dart-Code.flutter";
 export const debugAdapterPath = "out/dist/debug.js";
 
@@ -42,6 +42,7 @@ export const executableNames = {
 	dartdoc: isWin ? "dartdoc.bat" : "dartdoc",
 	devToolsToolBinary: isWin ? "dt.bat" : "dt",
 	devToolsToolLegacyBinary: isWin ? "devtools_tool.bat" : "devtools_tool",
+	dn: isWin ? "dn.bat" : "dn",
 	flutter: isWin ? "flutter.bat" : "flutter",
 	flutterDev: isWin ? "flutter-dev.bat" : "flutter-dev",
 	pub: isWin ? "pub.bat" : "pub",
@@ -131,7 +132,7 @@ export const addToPathInstructionsUrl = isWin
 			: undefined;
 
 export const modifyingFilesOutsideWorkspaceInfoUrl = "https://dartcode.org/docs/modifying-files-outside-workspace/";
-export const initializingFlutterMessage = "Initializing the Flutter SDK. This could take a few minutes.";
+export const initializingFlutterMessage = "Initializing the DartNative SDK. This could take a few minutes.";
 export const cloningFlutterMessage = "Downloading the Flutter SDK. This could take a few minutes.";
 
 
@@ -258,7 +259,7 @@ export const defaultLaunchJson = JSON.stringify(
 	{
 		configurations: [
 			{
-				name: "Dart & Flutter",
+				name: "Dart & DartNative",
 				request: "launch",
 				type: "dart",
 			},

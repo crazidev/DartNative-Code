@@ -16,6 +16,7 @@ export default defineConfig([
 			"node_modules/**",
 			"src/debug/**", // This is legacy code going away soon.
 			"out/**",
+			"scripts/**",
 			"webpack.config.js",
 		],
 	},

@@ -52,6 +52,7 @@ import { PackageCommands } from "./commands/packages";
 import { SdkCommands } from "./commands/sdk";
 import { SettingsCommands } from "./commands/settings";
 import { TestCommands, isInImplementationFileThatCanHaveTest, isInTestFileThatHasImplementation } from "./commands/test";
+import { WidgetRefactorCommands } from "./commands/widget_refactors";
 import { config } from "./config";
 import { DartTaskProvider } from "./dart/dart_task_provider";
 import { HotReloadOnSaveHandler } from "./dart/hot_reload_save_handler";
@@ -82,6 +83,7 @@ import { DartDebugAdapterRemoveErrorShowUserFactory } from "./providers/debug_ad
 import { DebugConfigProvider, DynamicDebugConfigProvider, InitialLaunchJsonDebugConfigProvider } from "./providers/debug_config_provider";
 import { DartMcpServerDefinitionProvider } from "./providers/mcp_server_definition_provider";
 import { SnippetCompletionItemProvider } from "./providers/snippet_completion_item_provider";
+import { WidgetCodeActionProvider } from "./providers/widget_code_action_provider";
 import { PubGlobal } from "./pub/global";
 import { ExtensionRecommentations } from "./recommendations/recommendations";
 import { DevToolsManager } from "./sdk/dev_tools/manager";
@@ -93,7 +95,7 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
 import * as util from "./utils";
 import { promptToReloadExtension } from "./utils";
 import { addToLogHeader, clearLogHeader, getExtensionLogPath, getLogHeader } from "./utils/log";
-import { getToolEnv, safeToolSpawn, setFlutterRoot, setupToolEnv } from "./utils/processes";
+import { getToolEnv, safeToolSpawn, setFlutterRoot, setSdkBinPaths, setupToolEnv } from "./utils/processes";
 import { FlutterPostMessageSidebar } from "./views/devtools/legacy_post_message_sidebar/sidebar";
 import { PropertyEditor } from "./views/devtools/property_editor";
 import { FlutterDtdSidebar } from "./views/devtools/sidebar";
@@ -211,9 +213,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	void vs.commands.executeCommand("setContext", SDK_IS_PRE_RELEASE, sdks.isPreReleaseSdk);
 
 
-	// Record the Flutter SDK path for FLUTTER_ROOT which will be used in the tool env.
+	// Record the Flutter SDK path for FLUTTER_ROOT and DARTNATIVE_ROOT which will be used in the tool env.
 	if (workspaceContext.hasAnyFlutterProjects && workspaceContext.sdks.flutter) {
 		setFlutterRoot(workspaceContext.sdks.flutter);
+		// Also prepend SDK bin paths to PATH for subprocesses (e.g. dn, dart).
+		const sdkBinDir = path.join(workspaceContext.sdks.flutter, "bin");
+		const dartSdkBinDir = path.join(workspaceContext.sdks.flutter, "bin", "cache", "dart-sdk", "bin");
+		setSdkBinPaths([sdkBinDir, dartSdkBinDir]);
 		setEnvHelper(); // Update
 	}
 
@@ -453,6 +459,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	// Snippets are language-specific
 	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/dart.json", () => true)));
 	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/flutter.json", (uri) => util.isInsideFlutterProject(uri))));
+
+	// Widget refactorings (Wrap with Padding/Center/etc., Extract Widget, Convert to StatefulWidget/StatelessWidget)
+	context.subscriptions.push(new WidgetRefactorCommands());
+	context.subscriptions.push(vs.languages.registerCodeActionsProvider(DART_MODE, new WidgetCodeActionProvider(), {
+		providedCodeActionKinds: WidgetCodeActionProvider.providedCodeActionKinds,
+	}));
 
 	context.subscriptions.push(DartLanguageConfiguration.register(DART_LANGUAGE));
 

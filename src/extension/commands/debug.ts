@@ -7,7 +7,7 @@ import { isInDartDebugSessionContext, isInFlutterDebugModeDebugSessionContext, i
 import { DebugOption, DebuggerType, LogCategory, LogSeverity, VmService, VmServiceExtension, debugOptionNames } from "../../shared/enums";
 import { DartWorkspaceContext, DevToolsDeepLinkData, IAmDisposable, LegacyWidgetErrorInspectData, LogMessage, Logger } from "../../shared/interfaces";
 import { PromiseCompleter, disposeAll } from "../../shared/utils";
-import { fsPath, isFlutterProjectFolder, isWithinPath } from "../../shared/utils/fs";
+import { fsPath, isDartNativeProjectFolder, isFlutterProjectFolder, isWithinPath } from "../../shared/utils/fs";
 import { ANALYSIS_FILTERS } from "../../shared/vscode/constants";
 import { getLaunchConfigDefaultTemplate } from "../../shared/vscode/debugger";
 import { DartDebugSessionInformation, ProgressMessage } from "../../shared/vscode/interfaces";
@@ -20,7 +20,7 @@ import { FileTracker } from "../analysis/file_tracker";
 import { config } from "../config";
 import { VmServiceExtensions, timeDilationNormal, timeDilationSlow } from "../flutter/vm_service_extensions";
 import { DevToolsLocation, DevToolsManager } from "../sdk/dev_tools/manager";
-import { isDartFile, isValidEntryFile } from "../utils";
+import { isDartFile, isInsideDartNativeProject, isPathInsideDartNativeProject, isValidEntryFile } from "../utils";
 import { LoggingCommands } from "./logging";
 
 export const debugSessions: DartDebugSessionInformation[] = [];
@@ -755,6 +755,18 @@ export class DebugCommands implements IAmDisposable {
 		return true;
 	}
 
+	private isDartNativeSession(session: DartDebugSessionInformation): boolean {
+		const conf = session.session.configuration as { cwd?: string; program?: string; name?: string } | undefined;
+		const cwd = typeof conf?.cwd === "string" ? conf.cwd : undefined;
+		const program = typeof conf?.program === "string" ? conf.program : undefined;
+		const name = typeof conf?.name === "string" ? conf.name : undefined;
+
+		return isInsideDartNativeProject(session.session.workspaceFolder?.uri)
+			|| (cwd ? isDartNativeProjectFolder(cwd) : false)
+			|| (program ? isPathInsideDartNativeProject(program) : false)
+			|| !!name?.includes("DartNative");
+	}
+
 	private async handleCustomEventWithSession(session: DartDebugSessionInformation, e: vs.DebugSessionCustomEvent) {
 		this.vmServices.handleDebugEvent(session, e)
 			.catch((e) => this.logger.error(e));
@@ -885,7 +897,8 @@ export class DebugCommands implements IAmDisposable {
 				}
 			}
 		} else if (event === "dart.progressStart") {
-			const progressId = body.progressId as string | undefined;
+			const rawBody = body as { progressId?: unknown; title?: unknown; message?: unknown } | undefined;
+			const progressId = typeof rawBody?.progressId === "string" ? rawBody.progressId : undefined;
 			if (!progressId) return;
 
 			// When a debug session is restarted by VS Code (eg. not handled by the DA), the session-end event
@@ -896,8 +909,8 @@ export class DebugCommands implements IAmDisposable {
 				delete session.progress[debugTerminatingProgressId];
 			}
 
-			const isHotReload = progressId?.toLowerCase().includes("reload");
-			const isHotRestart = progressId?.toLowerCase().includes("restart");
+			const isHotReload = progressId.toLowerCase().includes("reload");
+			const isHotRestart = progressId.toLowerCase().includes("restart");
 			const progressLocation = (isHotRestart || isHotReload) && config.hotReloadProgress === "statusBar" ? vs.ProgressLocation.Window : vs.ProgressLocation.Notification;
 
 			// Complete any existing one with this ID.
@@ -935,6 +948,17 @@ export class DebugCommands implements IAmDisposable {
 				this.currentHotRestartProgressId = progressId;
 			}
 
+			const isDartNative = this.isDartNativeSession(session);
+
+			let title = typeof rawBody?.title === "string" ? rawBody.title : undefined;
+			if (isDartNative && title) {
+				title = title.replace(/\bFlutter\b/g, "DartNative");
+			}
+			let message = typeof rawBody?.message === "string" ? rawBody.message : undefined;
+			if (isDartNative && message) {
+				message = message.replace(/\bFlutter\b/g, "DartNative");
+			}
+
 			await vs.window.withProgress(
 				// TODO: This was previously Window to match what we'd get using DAP progress
 				// notifications but users prefer larger notifications as they're easier to
@@ -942,24 +966,43 @@ export class DebugCommands implements IAmDisposable {
 				// https://github.com/Dart-Code/Dart-Code/issues/2597
 				// If this is changed back, ensure the waiting-for-debug-extension notification
 				// is still displayed with additional description.
-				{ location: progressLocation, title: body.title },
+				{ location: progressLocation, title },
 				(progress) => {
 					// Build a new progress and store it in the session.
 					const completer = new PromiseCompleter<void>();
 					session.progress[progressId] = new ProgressMessage(progress, completer);
-					if (body.message)
-						session.progress[progressId]?.report(body.message as string);
+					if (message)
+						session.progress[progressId]?.report(message);
 					return completer.promise;
 				},
 			);
 		} else if (event === "dart.progressUpdate") {
-			session.progress[body.progressId]?.report(body.message as string);
+			const rawBody = body as { progressId?: unknown; message?: unknown } | undefined;
+			const progressId = typeof rawBody?.progressId === "string" ? rawBody.progressId : undefined;
+			if (!progressId) return;
+
+			const isDartNative = this.isDartNativeSession(session);
+			let message = typeof rawBody?.message === "string" ? rawBody.message : undefined;
+			if (isDartNative && message) {
+				message = message.replace(/\bFlutter\b/g, "DartNative");
+			}
+			if (message)
+				session.progress[progressId]?.report(message);
 		} else if (event === "dart.progressEnd") {
-			const progress = session.progress[body.progressId];
+			const rawBody = body as { progressId?: unknown; message?: unknown } | undefined;
+			const progressId = typeof rawBody?.progressId === "string" ? rawBody.progressId : undefined;
+			if (!progressId) return;
+
+			const progress = session.progress[progressId];
 			if (progress) {
-				delete session.progress[body.progressId];
-				if (body.message) {
-					progress.report(body.message as string);
+				delete session.progress[progressId];
+				if (typeof rawBody?.message === "string") {
+					const isDartNative = this.isDartNativeSession(session);
+					let message = rawBody.message;
+					if (isDartNative) {
+						message = message.replace(/\bFlutter\b/g, "DartNative");
+					}
+					progress.report(message);
 					await new Promise((resolve) => setTimeout(resolve, 400));
 				}
 				progress.complete();

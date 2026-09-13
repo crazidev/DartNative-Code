@@ -151,6 +151,27 @@ dev_dependencies:
 		`);
 		assert.equal(isFlutter, true);
 	});
+
+	it("returns true for DartNative dependency in pubspec.yaml", () => {
+		const isFlutter = pubspecContentReferencesFlutter(`
+name: dartnative_bottom_sheet
+description: Native bottom sheets for DartNative.
+version: 0.1.0
+
+dependencies:
+  dartnative: ^1.0.0
+  dartnative_ios: ^1.0.0
+  dartnative_android: ^1.0.0
+  ffi: ^2.1.0
+
+dartnative:
+  plugin:
+    platforms:
+      ios:
+        ffiPlugin: true
+		`);
+		assert.equal(isFlutter, true);
+	});
 });
 
 
