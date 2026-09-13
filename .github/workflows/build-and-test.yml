@@ -1,17 +1,14 @@
 name: Run Tests
 
 on:
-  push:
-  pull_request:
-  schedule:
-     - cron: '0 6 * * 1' # 6am Monday
+  # push:
+  # pull_request:
+  # schedule:
+  #   - cron: "0 6 * * 1" # 6am Monday
   workflow_dispatch:
 
 jobs:
-
-
   build_exclusions:
-
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
@@ -37,7 +34,6 @@ jobs:
         run: echo 'excludes=[{"build-version":"beta"},{"os":"windows-latest"},{"os":"macos-latest"}]' >> $GITHUB_OUTPUT
 
   build:
-
     name: "${{ matrix.bot }} (${{ matrix.build-version }} ${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     needs: build_exclusions
@@ -48,14 +44,26 @@ jobs:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         node-version: [22]
         build-version: [stable, beta]
-        bot: [flutter_debug, flutter_debug_chrome, flutter_test_debug, dart_web_debug, flutter_repo, dart_debug, dart, flutter, misc, dart-antigravity, dart_debug-antigravity]
+        bot:
+          [
+            flutter_debug,
+            flutter_debug_chrome,
+            flutter_test_debug,
+            dart_web_debug,
+            flutter_repo,
+            dart_debug,
+            dart,
+            flutter,
+            misc,
+            dart-antigravity,
+            dart_debug-antigravity,
+          ]
         include:
           - os: ubuntu-latest
             bot: flutter_snap
         exclude: ${{ fromJSON(needs.build_exclusions.outputs.excludes) }}
 
     steps:
-
       - uses: actions/checkout@v7
 
       # upload-artifact fails if the path does not exist (it only supports
@@ -333,7 +341,6 @@ jobs:
             package.json
 
   merge_artifacts:
-
     name: Merge Artifacts
     needs: build
     # Using always() (to run on failure) will cause us to also run regardless of whether "build" ran, so
@@ -342,7 +349,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Merge logs
         uses: actions/upload-artifact/merge@v7
         if: always()
@@ -393,14 +399,12 @@ jobs:
         continue-on-error: true # fails if empty
 
   upload_coverage:
-
     name: Send Coverage to Codecov
     needs: merge_artifacts
     if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v7
 
       - name: Download coverage
@@ -416,7 +420,6 @@ jobs:
           verbose: true
 
   notify_failure:
-
     permissions:
       contents: none
     name: Notify Discord of Failure
@@ -425,7 +428,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Send notification to Discord
         run: 'Invoke-WebRequest -Headers @{ "Content-Type" = "application/json" } -Method Post -Body "{`"content`":`"Build failed on $($env:GITHUB_REF.Replace(`"refs/heads/`", `"`")): https://github.com/Dart-Code/Dart-Code/commit/$($env:GITHUB_SHA)/checks`"}" -Uri $env:DISCORD_WEBHOOK'
         shell: pwsh
