@@ -48,3 +48,50 @@ export function getArgsForFolder(folder: string, globalFlutterArgs: string[]): s
 export function toolNameForFolder(folder: string): string {
 	return isDartNativeProjectFolder(folder) ? "dn" : "flutter";
 }
+
+/**
+ * Builds the final CLI args list for a DartNative `dn` invocation.
+ *
+ * Properly positions global args, subcommand-specific additional args, and
+ * the subcommand itself so that `dn` receives arguments in the expected order:
+ *   dn [globalArgs] <subcommand> [subcommandArgs] [executionArgs...]
+ *
+ * For non-DartNative folders, returns the execution args unchanged and
+ * expects the caller to prepend Flutter global args separately.
+ */
+export function buildDartNativeCliArgs(options: {
+	folder: string;
+	executionArgs: string[];
+	globalAdditionalArgs: string[];
+	runAdditionalArgs: string[];
+	testAdditionalArgs: string[];
+	pubAdditionalArgs?: string[];
+}): { isDartNative: boolean; args: string[] } {
+	const { folder, executionArgs, globalAdditionalArgs, runAdditionalArgs, testAdditionalArgs, pubAdditionalArgs = [] } = options;
+	const dartNative = isDartNativeProjectFolder(folder);
+	if (!dartNative)
+		return { isDartNative: false, args: executionArgs };
+
+	// Identify subcommand from the execution args.
+	const subcommand = executionArgs[0];
+	const subcommandArgs = subcommand === "run"
+		? runAdditionalArgs
+		: subcommand === "test"
+			? testAdditionalArgs
+			: [];
+	const pubArgs = subcommand === "pub"
+		? pubAdditionalArgs
+		: [];
+
+	// Order: global DartNative args, then subcommand-specific args, then all original execution args, then pub args.
+	const dedupe = (src: string[], existing: string[]): string[] =>
+		src.filter((a) => !existing.includes(a));
+
+	const result: string[] = [];
+	result.push(...globalAdditionalArgs);
+	result.push(...dedupe(subcommandArgs, result));
+	result.push(...executionArgs);
+	result.push(...dedupe(pubArgs, result));
+
+	return { isDartNative: true, args: result };
+}

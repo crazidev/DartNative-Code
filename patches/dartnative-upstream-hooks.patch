@@ -1,12 +1,14 @@
 diff --git a/.gitignore b/.gitignore
-index 666a2f43..48fbcef2 100644
+index 666a2f43..2ce408b3 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -22,3 +22,4 @@ logs/
+@@ -22,3 +22,6 @@ logs/
  node_modules/
  out/
  pubspec.lock
 +package.json.upstream
++.agents/
++skills-lock.json
 diff --git a/eslint.config.js b/eslint.config.js
 index 1454e5b5..d82c5643 100644
 --- a/eslint.config.js
@@ -415,6 +417,28 @@ index bc8d6577..e0f4dde2 100644
  	}
  
  	public dispose(): void {
+diff --git a/src/extension/commands/add_dependency.ts b/src/extension/commands/add_dependency.ts
+index a5aa503b..13d8848b 100644
+--- a/src/extension/commands/add_dependency.ts
++++ b/src/extension/commands/add_dependency.ts
+@@ -193,7 +193,7 @@ export class AddDependencyCommand extends BaseSdkCommands {
+ 		}
+ 
+ 		for (const uri of uris) {
+-			const useFlutter = this.sdks.flutter && (forceFlutter || util.isInsideFlutterProject(uri));
++			const useFlutter = this.sdks.flutter && (forceFlutter || util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri));
+ 			for (const commandArgs of commandsArgs) {
+ 				if (useFlutter) {
+ 					await this.runFlutter(["pub", ...commandArgs], uri);
+@@ -217,7 +217,7 @@ export class AddDependencyCommand extends BaseSdkCommands {
+ 
+ 		const args = ["remove", packageName];
+ 
+-		if (this.sdks.flutter && util.isInsideFlutterProject(uri)) {
++		if (this.sdks.flutter && (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))) {
+ 			return this.runFlutter(["pub", ...args], uri);
+ 		} else {
+ 			return this.runPub(args, uri);
 diff --git a/src/extension/commands/debug.ts b/src/extension/commands/debug.ts
 index 9752e2c3..a6df3eaf 100644
 --- a/src/extension/commands/debug.ts
@@ -759,10 +783,10 @@ index d1940504..ea8b43e5 100644
  		} finally {
  			isFetchingPackages = false;
 diff --git a/src/extension/commands/sdk.ts b/src/extension/commands/sdk.ts
-index 8e18b39b..94c6a14e 100644
+index 8e18b39b..7d2d73f7 100644
 --- a/src/extension/commands/sdk.ts
 +++ b/src/extension/commands/sdk.ts
-@@ -2,12 +2,13 @@ import * as fs from "fs";
+@@ -2,12 +2,14 @@ import * as fs from "fs";
  import * as path from "path";
  import * as vs from "vscode";
  import { DartCapabilities } from "../../shared/capabilities/dart";
@@ -773,11 +797,12 @@ index 8e18b39b..94c6a14e 100644
  import { logProcess } from "../../shared/logging";
  import { getPubExecutionInfo, RunProcessResult } from "../../shared/processes";
  import { disposeAll, nullToUndefined, PromiseCompleter, usingCustomScript } from "../../shared/utils";
-+import { fsPath, isDartNativeProjectFolder } from "../../shared/utils/fs";
++import { fsPath } from "../../shared/utils/fs";
++import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
  import { getPackageOrFolderDisplayName } from "../../shared/vscode/display_names";
  import { OperationProgress } from "../../shared/vscode/interfaces";
  import { Context } from "../../shared/vscode/workspace";
-@@ -56,20 +57,29 @@ export class BaseSdkCommands implements IAmDisposable {
+@@ -56,35 +58,79 @@ export class BaseSdkCommands implements IAmDisposable {
  	}
  
  	public runFlutter(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
@@ -806,10 +831,79 @@ index 8e18b39b..94c6a14e 100644
  		);
  
 -		const allArgs = getGlobalFlutterArgs()
-+		const allArgs = (isDartNative ? [] : getGlobalFlutterArgs())
- 			.concat(config.for(vs.Uri.file(folder)).flutterAdditionalArgs)
- 			.concat(execution.args);
+-			.concat(config.for(vs.Uri.file(folder)).flutterAdditionalArgs)
+-			.concat(execution.args);
++		const folderConfig = config.for(vs.Uri.file(folder));
++		// For DartNative projects, skip the Flutter-specific global args and use DartNative args instead.
++		// Identify the subcommand (first arg) to know which additional args apply.
++		const subcommand = args[0];
++		const pubArgs = subcommand === "pub"
++			? folderConfig.pubAdditionalArgs
++			: [];
++		let allArgs: string[];
++		if (isDartNative) {
++			// Global DartNative args come first, then subcommand-specific args, then the execution args, then pub args.
++			const globalArgs = folderConfig.flutterAdditionalArgs; // dartNativeAdditionalArgs via renamedSettingKeys.
++			const subcommandArgs = subcommand === "test"
++				? folderConfig.flutterTestAdditionalArgs // dartNativeTestAdditionalArgs.
++				: subcommand === "run"
++					? folderConfig.flutterRunAdditionalArgs // dartNativeRunAdditionalArgs.
++					: [];
++			allArgs = globalArgs.concat(subcommandArgs).concat(execution.args).concat(pubArgs);
++		} else {
++			allArgs = getGlobalFlutterArgs()
++				.concat(folderConfig.flutterAdditionalArgs)
++				.concat(execution.args)
++				.concat(pubArgs);
++		}
  
+ 		return this.runCommandInFolder(packageOrFolderDisplayName, folder, execution.executable, allArgs, alwaysShowOutput, operationProgress);
+ 	}
+ 
+ 	public runPub(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
+-		return this.runCommandForWorkspace(this.runPubInFolder.bind(this), `Select the folder to run "pub ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
++		const isDartNative = selection && isDartNativeProjectFolder(fsPath(selection));
++		const toolName = isDartNative ? "dn pub" : "pub";
++		return this.runCommandForWorkspace(this.runPubInFolder.bind(this), `Select the folder to run "${toolName} ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
+ 	}
+ 
+ 	protected runPubInFolder(folder: string, args: string[], packageOrFolderDisplayName: string, alwaysShowOutput = false, operationProgress?: OperationProgress): Promise<RunProcessResult | undefined> {
++		const isDartNative = isDartNativeProjectFolder(folder);
++		const folderConfig = config.for(vs.Uri.file(folder));
++		const pubAdditional = folderConfig.pubAdditionalArgs;
++
++		if (isDartNative && this.sdks.flutter) {
++			const dnBinary = path.join(this.sdks.flutter, "bin", executableNames.dn);
++			if (fs.existsSync(dnBinary)) {
++				const globalArgs = folderConfig.flutterAdditionalArgs;
++				const dnArgs = globalArgs.concat(["pub", ...args]).concat(pubAdditional);
++				return this.runCommandInFolder(packageOrFolderDisplayName, folder, dnBinary, dnArgs, alwaysShowOutput, operationProgress);
++			}
++		}
++
+ 		if (!this.sdks.dart)
+ 			throw new Error("Dart SDK not available");
+ 
+-		args = args.concat(...config.for(vs.Uri.file(folder)).pubAdditionalArgs);
++		args = args.concat(...pubAdditional);
+ 
+ 		const pubExecution = getPubExecutionInfo(this.sdks.dart, args);
+ 
+@@ -166,10 +212,10 @@ export class SdkCommands extends BaseSdkCommands {
+ 		super(logger, context, workspace, dartCapabilities);
+ 		const dartSdkManager = new DartSdkManager(this.logger, this.workspace.sdks);
+ 		this.disposables.push(vs.commands.registerCommand("dart.changeSdk", () => dartSdkManager.changeSdk()));
+-		if (workspace.hasAnyFlutterProjects) {
+-			const flutterSdkManager = new FlutterSdkManager(this.logger, workspace.sdks);
+-			this.disposables.push(vs.commands.registerCommand("dart.changeFlutterSdk", () => flutterSdkManager.changeSdk()));
+-		}
++		// Register the Flutter/DartNative SDK switcher unconditionally so it is always available,
++		// even before a project is opened (users may have dartNativeSdkPaths pre-configured).
++		const flutterSdkManager = new FlutterSdkManager(this.logger, workspace.sdks);
++		this.disposables.push(vs.commands.registerCommand("dart.changeFlutterSdk", () => flutterSdkManager.changeSdk()));
+ 
+ 		// Monitor version files for SDK upgrades.
+ 		void this.setupVersionWatcher();
 diff --git a/src/extension/config.ts b/src/extension/config.ts
 index 71877abe..32b4181d 100644
 --- a/src/extension/config.ts
@@ -1035,63 +1129,32 @@ index 71877abe..32b4181d 100644
  	get insertArgumentPlaceholders(): boolean { return this.getConfig<boolean>("insertArgumentPlaceholders", true); }
  	get lineLength(): number { return this.getConfig<number>("lineLength", 80); }
 diff --git a/src/extension/extension.ts b/src/extension/extension.ts
-index 4bc3697d..4413995e 100644
+index 4bc3697d..501254d5 100644
 --- a/src/extension/extension.ts
 +++ b/src/extension/extension.ts
-@@ -52,6 +52,7 @@ import { PackageCommands } from "./commands/packages";
- import { SdkCommands } from "./commands/sdk";
- import { SettingsCommands } from "./commands/settings";
- import { TestCommands, isInImplementationFileThatCanHaveTest, isInTestFileThatHasImplementation } from "./commands/test";
-+import { WidgetRefactorCommands } from "./commands/widget_refactors";
- import { config } from "./config";
- import { DartTaskProvider } from "./dart/dart_task_provider";
- import { HotReloadOnSaveHandler } from "./dart/hot_reload_save_handler";
-@@ -82,6 +83,7 @@ import { DartDebugAdapterRemoveErrorShowUserFactory } from "./providers/debug_ad
- import { DebugConfigProvider, DynamicDebugConfigProvider, InitialLaunchJsonDebugConfigProvider } from "./providers/debug_config_provider";
- import { DartMcpServerDefinitionProvider } from "./providers/mcp_server_definition_provider";
- import { SnippetCompletionItemProvider } from "./providers/snippet_completion_item_provider";
-+import { WidgetCodeActionProvider } from "./providers/widget_code_action_provider";
- import { PubGlobal } from "./pub/global";
- import { ExtensionRecommentations } from "./recommendations/recommendations";
- import { DevToolsManager } from "./sdk/dev_tools/manager";
-@@ -452,7 +454,11 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -93,7 +93,7 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
+ import * as util from "./utils";
+ import { promptToReloadExtension } from "./utils";
+ import { addToLogHeader, clearLogHeader, getExtensionLogPath, getLogHeader } from "./utils/log";
+-import { getToolEnv, safeToolSpawn, setFlutterRoot, setupToolEnv } from "./utils/processes";
++import { getToolEnv, safeToolSpawn, setFlutterRoot, setSdkBinPaths, setupToolEnv } from "./utils/processes";
+ import { FlutterPostMessageSidebar } from "./views/devtools/legacy_post_message_sidebar/sidebar";
+ import { PropertyEditor } from "./views/devtools/property_editor";
+ import { FlutterDtdSidebar } from "./views/devtools/sidebar";
+@@ -211,9 +211,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+ 	void vs.commands.executeCommand("setContext", SDK_IS_PRE_RELEASE, sdks.isPreReleaseSdk);
  
- 	// Snippets are language-specific
- 	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/dart.json", () => true)));
--	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/flutter.json", (uri) => util.isInsideFlutterProject(uri))));
-+	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/flutter.json", (uri) => util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))));
-+
-+	// Widget Refactoring Code Actions (Padding, Container, Row, Column, Center, Expanded, Remove, etc.)
-+	context.subscriptions.push(new WidgetRefactorCommands());
-+	context.subscriptions.push(vs.languages.registerCodeActionsProvider(DART_MODE, new WidgetCodeActionProvider(), { providedCodeActionKinds: WidgetCodeActionProvider.providedCodeActionKinds }));
  
- 	context.subscriptions.push(DartLanguageConfiguration.register(DART_LANGUAGE));
- 
-@@ -624,6 +630,16 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
- 		}, (error) => logger.error(error));
- 	}));
- 
-+	context.subscriptions.push(vs.commands.registerCommand("_dart.formatDocument", async () => {
-+		setTimeout(async () => {
-+			try {
-+				await vs.commands.executeCommand("editor.action.formatDocument");
-+			} catch (e) {
-+				logger.error(e);
-+			}
-+		}, 50);
-+	}));
-+
- 	// Warn the user if they've opened a folder with mismatched casing.
- 	if (vs.workspace.workspaceFolders?.length) {
- 		for (const wf of vs.workspace.workspaceFolders) {
-@@ -909,7 +925,7 @@ export async function deactivate(isRestart = false, reason: ExtensionRestartReas
- function setCommandVisiblity(enable: boolean, workspaceContext?: WorkspaceContext) {
- 	void vs.commands.executeCommand("setContext", PROJECT_LOADED, enable);
- 	void vs.commands.executeCommand("setContext", DART_PROJECT_LOADED, enable && workspaceContext?.hasAnyStandardDartProjects);
--	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && workspaceContext?.hasAnyFlutterProjects);
-+	void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, enable && (workspaceContext?.hasAnyFlutterProjects || workspaceContext?.hasAnyDartNativeProjects));
- 	void vs.commands.executeCommand("setContext", WEB_PROJECT_LOADED, enable && workspaceContext?.hasAnyWebProjects);
- }
+-	// Record the Flutter SDK path for FLUTTER_ROOT which will be used in the tool env.
++	// Record the Flutter SDK path for FLUTTER_ROOT and DARTNATIVE_ROOT which will be used in the tool env.
+ 	if (workspaceContext.hasAnyFlutterProjects && workspaceContext.sdks.flutter) {
+ 		setFlutterRoot(workspaceContext.sdks.flutter);
++		// Also prepend SDK bin paths to PATH for subprocesses (e.g. dn, dart).
++		const sdkBinDir = path.join(workspaceContext.sdks.flutter, "bin");
++		const dartSdkBinDir = path.join(workspaceContext.sdks.flutter, "bin", "cache", "dart-sdk", "bin");
++		setSdkBinPaths([sdkBinDir, dartSdkBinDir]);
+ 		setEnvHelper(); // Update
+ 	}
  
 diff --git a/src/extension/providers/debug_adapter_descriptor_factory.ts b/src/extension/providers/debug_adapter_descriptor_factory.ts
 index bdb69fa6..27eb416c 100644
@@ -1158,137 +1221,35 @@ index bdb69fa6..27eb416c 100644
  			const args = ["debug_adapter"];
  			if (isDartTestOrFlutterTest)
 diff --git a/src/extension/providers/debug_config_provider.ts b/src/extension/providers/debug_config_provider.ts
-index 280fe788..ad5a0558 100644
+index 280fe788..cdf51467 100644
 --- a/src/extension/providers/debug_config_provider.ts
 +++ b/src/extension/providers/debug_config_provider.ts
-@@ -3,7 +3,7 @@ import * as path from "path";
- import * as vs from "vscode";
- import { CancellationToken, DebugConfiguration, DebugConfigurationProvider, ProviderResult, Uri, window, workspace, WorkspaceFolder } from "vscode";
- import { FlutterCapabilities } from "../../shared/capabilities/flutter";
--import { fiveSecondsInMs, isDartCodeTestRun, runAnywayAction, showErrorsAction } from "../../shared/constants";
-+import { executableNames, fiveSecondsInMs, isDartCodeTestRun, runAnywayAction, showErrorsAction } from "../../shared/constants";
- import { HAS_LAST_DEBUG_CONFIG, HAS_LAST_TEST_DEBUG_CONFIG } from "../../shared/constants.contexts";
- import { DartLaunchArgs, DartVsCodeLaunchArgs } from "../../shared/debugging/interfaces";
- import { DebuggerType, debuggerTypeFromString, VmServiceExtension } from "../../shared/enums";
-@@ -13,7 +13,7 @@ import { DartWorkspaceContext, IFlutterDaemon, Logger } from "../../shared/inter
- import { TestModel } from "../../shared/test/test_model";
- import { getPackageTestCapabilitiesForDartProject } from "../../shared/test/version";
- import { isWebDevice, notNullOrUndefined } from "../../shared/utils";
--import { findCommonAncestorFolder, forceWindowsDriveLetterToUppercase, fsPath, isFlutterProjectFolder, isWithinPath } from "../../shared/utils/fs";
-+import { findCommonAncestorFolder, forceWindowsDriveLetterToUppercase, fsPath, isDartNativeProjectFolder, isFlutterProjectFolder, isWithinPath } from "../../shared/utils/fs";
- import { getProgramPath } from "../../shared/utils/test";
- import { FlutterDeviceManager } from "../../shared/vscode/device_manager";
- import { getActiveRealFileEditor } from "../../shared/vscode/editors";
-@@ -25,7 +25,7 @@ import { config, ResourceConfig } from "../config";
- import { PubGlobal } from "../pub/global";
- import { WebDev } from "../pub/webdev";
- import { DevToolsManager } from "../sdk/dev_tools/manager";
--import { ensureDebugLaunchUniqueId, getExcludedFolders, hasTestFilter, insertSessionName, isInsideFolderNamed, isTestFileOrFolder, isTestFolder, isValidEntryFile, projectCanUsePackageTest } from "../utils";
-+import { ensureDebugLaunchUniqueId, getExcludedFolders, hasTestFilter, insertSessionName, isInsideFolderNamed, isPathInsideDartNativeProject, isTestFileOrFolder, isTestFolder, isValidEntryFile, projectCanUsePackageTest } from "../utils";
- import { getGlobalFlutterArgs, getToolEnv } from "../utils/processes";
+@@ -731,8 +731,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
+ 		const isDebug = debugConfig.noDebug !== true;
+ 		const isAttach = debugConfig.request === "attach";
+ 		const isWeb = isWebDevice(debugConfig.deviceId);
++		// Detect DartNative debug sessions by the customTool pointing to dn binary.
++		const isDartNative = !!(debugConfig.customTool && path.basename(debugConfig.customTool).startsWith("dn"));
  
- export class DebugConfigProvider implements DebugConfigurationProvider {
-@@ -599,8 +599,12 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
- 	private async setupDebugConfig(folder: WorkspaceFolder | undefined, debugConfig: DartVsCodeLaunchArgs, debuggerType: DebuggerType, isFlutter: boolean, isAttach: boolean, isTest: boolean, device: Device | undefined, deviceManager: FlutterDeviceManager | undefined): Promise<void> {
- 		const conf = config.for(folder?.uri);
+-		this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
++		if (!isDartNative)
++			this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
+ 		this.addArgsIfNotExist(args, ...conf.flutterAdditionalArgs);
+ 		if (isAttach)
+ 			this.addArgsIfNotExist(args, ...conf.flutterAttachAdditionalArgs);
+@@ -804,8 +807,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
  
-+		const isDartNative = isDartNativeProjectFolder(folder ? fsPath(folder.uri) : undefined)
-+			|| (debugConfig.cwd ? isDartNativeProjectFolder(debugConfig.cwd) : false)
-+			|| (debugConfig.program ? isPathInsideDartNativeProject(debugConfig.program) : false);
-+
- 		if (!debugConfig.name)
--			debugConfig.name = isFlutter ? "Flutter" : "Dart";
-+			debugConfig.name = isDartNative ? "DartNative" : isFlutter ? "Flutter" : "Dart";
+ 	protected buildFlutterTestToolArgs(debugConfig: DartVsCodeLaunchArgs, conf: ResourceConfig): string[] {
+ 		const args: string[] = [];
++		// Detect DartNative debug sessions by the customTool pointing to dn binary.
++		const isDartNative = !!(debugConfig.customTool && path.basename(debugConfig.customTool).startsWith("dn"));
  
- 		if (isFlutter && device) {
- 			const deviceLabel = deviceManager ? deviceManager.labelForDevice(device) : device.name;
-@@ -662,6 +666,13 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
- 				debugConfig.customTool = customScript?.script;
- 				debugConfig.customToolReplacesArgs = customScript?.replacesArgs;
- 			}
-+			if (isDartNative && !debugConfig.customTool) {
-+				const dnBinary = path.join(this.wsContext.sdks.flutter, "bin", executableNames.dn);
-+				if (fs.existsSync(dnBinary)) {
-+					debugConfig.customTool = dnBinary;
-+					debugConfig.customToolReplacesArgs = 0;
-+				}
-+			}
- 		}
- 	}
+-		this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
++		if (!isDartNative)
++			this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
+ 		this.addArgsIfNotExist(args, ...conf.flutterAdditionalArgs);
+ 		this.addArgsIfNotExist(args, ...conf.flutterTestAdditionalArgs);
  
-@@ -875,7 +886,7 @@ export class InitialLaunchJsonDebugConfigProvider implements DebugConfigurationP
- 			}
- 		} else {
- 			results.push({
--				name: "Dart & Flutter",
-+				name: "Dart & DartNative",
- 				request: "launch",
- 				type: "dart",
- 			});
-@@ -896,7 +907,9 @@ export class DynamicDebugConfigProvider implements DebugConfigurationProvider {
- 			? await getAllProjectFolders(this.logger, getExcludedFolders, { requirePubspec: true, searchDepth: config.projectSearchDepth, workspaceFolders: [folder] })
- 			: [];
- 		for (const projectFolder of projectFolders) {
-+			const isDartNative = isDartNativeProjectFolder(projectFolder);
- 			const isFlutter = isFlutterProjectFolder(projectFolder);
-+			const frameworkName = isDartNative ? "DartNative" : "Flutter";
- 			const name = path.basename(projectFolder);
- 			// Compute cwd, using undefined instead of empty if rootFolder === projectFolder
- 			const cwd = rootFolder ? path.relative(rootFolder, projectFolder) || undefined : undefined;
-@@ -904,7 +917,7 @@ export class DynamicDebugConfigProvider implements DebugConfigurationProvider {
- 
- 			if (isFlutter && exists("lib/main.dart") && this.deviceManager) {
- 				results.push({
--					name: `${name} (Flutter)`,
-+					name: `${name} (${frameworkName})`,
- 					program: "lib/main.dart",
- 					cwd,
- 					request: "launch",
-@@ -914,7 +927,7 @@ export class DynamicDebugConfigProvider implements DebugConfigurationProvider {
- 				for (const device of devices) {
- 					const deviceLabel = this.deviceManager?.labelForDevice(device);
- 					results.push({
--						name: `${name} (Flutter ${deviceLabel})`,
-+						name: `${name} (${frameworkName} ${deviceLabel})`,
- 						program: "lib/main.dart",
- 						cwd,
- 						deviceId: device.id,
-@@ -923,7 +936,7 @@ export class DynamicDebugConfigProvider implements DebugConfigurationProvider {
- 					});
- 				}
- 				results.push({
--					name: `${name} (Flutter profile mode)`,
-+					name: `${name} (${frameworkName} profile mode)`,
- 					program: "lib/main.dart",
- 					cwd,
- 					request: "launch",
-@@ -931,7 +944,7 @@ export class DynamicDebugConfigProvider implements DebugConfigurationProvider {
- 					flutterMode: "profile",
- 				});
- 				results.push({
--					name: `${name} (Flutter release mode)`,
-+					name: `${name} (${frameworkName} release mode)`,
- 					program: "lib/main.dart",
- 					cwd,
- 					request: "launch",
-@@ -959,7 +972,7 @@ export class DynamicDebugConfigProvider implements DebugConfigurationProvider {
- 			}
- 			if (exists("test")) {
- 				results.push({
--					name: `${name} (${isFlutter ? "Flutter" : "Dart"} Tests)`,
-+					name: `${name} (${isDartNative ? "DartNative" : isFlutter ? "Flutter" : "Dart"} Tests)`,
- 					program: "test",
- 					cwd,
- 					request: "launch",
-@@ -968,7 +981,7 @@ export class DynamicDebugConfigProvider implements DebugConfigurationProvider {
- 			}
- 			if (isFlutter && exists("integration_test")) {
- 				results.push({
--					name: `${name} (${isFlutter ? "Flutter" : "Dart"} Integration Tests)`,
-+					name: `${name} (${isDartNative ? "DartNative" : isFlutter ? "Flutter" : "Dart"} Integration Tests)`,
- 					program: "integration_test",
- 					cwd,
- 					request: "launch",
 diff --git a/src/extension/providers/snippet_completion_item_provider.ts b/src/extension/providers/snippet_completion_item_provider.ts
 index d2813240..3ed290f6 100644
 --- a/src/extension/providers/snippet_completion_item_provider.ts
@@ -1453,185 +1414,153 @@ index 83d57f88..218eee28 100644
  		};
  	}
  
+diff --git a/src/extension/sdk/sdk_manager.ts b/src/extension/sdk/sdk_manager.ts
+index db388a99..4860fafd 100644
+--- a/src/extension/sdk/sdk_manager.ts
++++ b/src/extension/sdk/sdk_manager.ts
+@@ -1,7 +1,7 @@
+ import * as fs from "fs";
+ import * as path from "path";
+ import * as vs from "vscode";
+-import { dartVMPath, flutterPath } from "../../shared/constants";
++import { dartVMPath, executableNames, flutterPath } from "../../shared/constants";
+ import { Logger, Sdks } from "../../shared/interfaces";
+ import { versionIsAtLeast } from "../../shared/utils";
+ import { existsAndIsFileSync, getChildFolders, getSdkVersion, homeRelativePath, safeRealpathSync } from "../../shared/utils/fs";
+@@ -18,6 +18,10 @@ abstract class SdkManager {
+ 	protected abstract getLabel(version: string): string;
+ 	protected abstract clearWorkspaceSdk(): void;
+ 	protected abstract setSdk(folder: string | undefined, target: vs.ConfigurationTarget): void;
++	/** Returns true if the given folder looks like a valid SDK for this manager. Override for multi-binary support. */
++	protected isSdkFolder(folder: string): boolean {
++		return existsAndIsFileSync(path.join(folder, this.executablePath));
++	}
+ 
+ 	public changeSdk() {
+ 		if (this.sdkPaths?.length)
+@@ -39,7 +43,7 @@ abstract class SdkManager {
+ 			allPaths.push(this.currentSdk);
+ 
+ 		const sdkFolders = allPaths
+-			.filter((f) => existsAndIsFileSync(path.join(f, this.executablePath))); // Only those that look like SDKs.
++			.filter((f) => this.isSdkFolder(f)); // Only those that look like SDKs.
+ 
+ 		const sdkItems: SdkPickItem[] = sdkFolders.map((f) => {
+ 			// Resolve symlinks so we look in correct folder for version file.
+@@ -105,20 +109,27 @@ export class DartSdkManager extends SdkManager {
+ }
+ 
+ export class FlutterSdkManager extends SdkManager {
+-	protected get sdkPaths(): string[] { return config.flutterSdkPaths; }
++	// Uses dartNativeSdkPaths so the quick-pick works for DartNative SDK switching.
++	protected get sdkPaths(): string[] { return config.dartNativeSdkPaths; }
+ 	protected get currentSdk(): string | undefined { return this.sdks.flutter; }
+-	protected get configuredSdk(): string | undefined { return config.flutterSdkPath; }
+-	protected get configName(): string { return "dart.flutterSdkPaths"; }
++	protected get configuredSdk(): string | undefined { return config.dartNativeSdkPath; }
++	protected get configName(): string { return "dartx.dartNativeSdkPaths"; }
++	// Used as a fallback executable to determine SDK folders; dn is preferred.
+ 	protected get executablePath() { return flutterPath; }
++	protected isSdkFolder(folder: string): boolean {
++		// Accept either bin/dn or bin/flutter as evidence of a DartNative SDK.
++		return existsAndIsFileSync(path.join(folder, "bin", executableNames.dn))
++			|| existsAndIsFileSync(path.join(folder, flutterPath));
++	}
+ 	protected getLabel(version: string) {
+-		return `Flutter SDK ${version}`;
++		return `DartNative SDK ${version}`;
+ 	}
+ 	protected clearWorkspaceSdk() {
+ 		if (config.workspaceFlutterSdkPath)
+-			void config.setFlutterSdkPath(undefined, vs.ConfigurationTarget.Workspace);
++			void config.setDartNativeSdkPath(undefined, vs.ConfigurationTarget.Workspace);
+ 	}
+ 	protected setSdk(folder: string | undefined, target: vs.ConfigurationTarget) {
+-		void config.setFlutterSdkPath(folder, target);
++		void config.setDartNativeSdkPath(folder, target);
+ 	}
+ }
+ 
+diff --git a/src/extension/sdk/status_bar_version_tracker.ts b/src/extension/sdk/status_bar_version_tracker.ts
+index b27e0781..1a5d4fc2 100644
+--- a/src/extension/sdk/status_bar_version_tracker.ts
++++ b/src/extension/sdk/status_bar_version_tracker.ts
+@@ -13,14 +13,17 @@ export class StatusBarVersionTracker implements IAmDisposable {
+ 		const isFlutter = workspaceContext.hasAnyFlutterProjects;
+ 		const dartIsFromFlutter = workspaceContext.sdks.dartSdkIsFromFlutter;
+ 
+-		const canChangeFlutterSdk = config.flutterSdkPaths && config.flutterSdkPaths.length > 0;
++		// Use dartNativeSdkPaths when available (patched), fall back to flutterSdkPaths.
++		const dnSdkPaths = (config as any).dartNativeSdkPaths ?? config.flutterSdkPaths;
++		const canChangeFlutterSdk = dnSdkPaths && dnSdkPaths.length > 0;
+ 		const canChangeDartSdk = !isFlutter && config.sdkPaths && config.sdkPaths.length > 0;
+ 
+ 		const flutterVersion = this.versionOrLatest(workspaceContext.sdks.flutterVersion);
+ 		let dartVersion = this.versionOrLatest(workspaceContext.sdks.dartVersion);
+ 
++		// When the Dart SDK is bundled with DartNative, label it accordingly.
+ 		if (dartIsFromFlutter)
+-			dartVersion = `${dartVersion} (Flutter)`;
++			dartVersion = `${dartVersion} (DartNative)`;
+ 
+ 		if (dartVersion) {
+ 			this.addStatusBarItem(
+@@ -33,7 +36,7 @@ export class StatusBarVersionTracker implements IAmDisposable {
+ 		if (isFlutter && flutterVersion) {
+ 			this.addStatusBarItem(
+ 				"dart.flutterSdkVersion",
+-				"Flutter",
++				"DartNative",
+ 				flutterVersion,
+ 				canChangeFlutterSdk ? "dart.changeFlutterSdk" : undefined,
+ 			);
 diff --git a/src/extension/sdk/utils.ts b/src/extension/sdk/utils.ts
-index 87d7e68a..f39c79dd 100644
+index 87d7e68a..bc8e666e 100644
 --- a/src/extension/sdk/utils.ts
 +++ b/src/extension/sdk/utils.ts
-@@ -5,7 +5,7 @@ import { commands, ExtensionContext, extensions, ProgressLocation, Uri, window,
- import { analyzerSnapshotPath, cloningFlutterMessage, DART_DOWNLOAD_URL, dartPlatformName, dartVMPath, executableNames, ExtensionRestartReason, FLUTTER_CREATE_PROJECT_TRIGGER_FILE, FLUTTER_DOWNLOAD_URL, flutterPath, isLinux, MISSING_VERSION_FILE_VERSION, openSettingsAction, SdkTypeString, showLogAction } from "../../shared/constants";
- import { GetSDKCommandConfig, GetSDKCommandResult, Logger, SdkSearchResult, SdkSearchResults, WorkspaceConfig, WritableWorkspaceConfig } from "../../shared/interfaces";
- import { flatMap, isDartSdkFromFlutter, notUndefined } from "../../shared/utils";
--import { existsAndIsDirectorySync, existsAndIsFileSync, extractFlutterSdkPathFromPackagesFile, fsPath, getSdkVersion, hasPubspec, projectReferencesFlutter, safeRealpathSync } from "../../shared/utils/fs";
-+import { existsAndIsDirectorySync, existsAndIsFileSync, extractFlutterSdkPathFromPackagesFile, fsPath, getSdkVersion, hasPubspec, projectReferencesDartNative, projectReferencesFlutter, safeRealpathSync } from "../../shared/utils/fs";
- import { resolvedPromise } from "../../shared/utils/promises";
- import { processBazelWorkspace, processDartSdkRepository, processFuchsiaWorkspace } from "../../shared/utils/workspace";
- import { envUtils, getAllProjectFolders, getDartWorkspaceFolders, resolvePaths } from "../../shared/vscode/utils";
-@@ -311,7 +311,9 @@ export class SdkUtils {
- 
- 		// Some paths to search after PATH as a final resort.
- 		const fallbackSdkSearchPaths = [
-+			process.env.DARTNATIVE_ROOT,
- 			process.env.FLUTTER_ROOT,
-+			"~/zero",
- 			isLinux ? "~/snap/flutter/common/flutter" : undefined,
- 			"~/flutter-sdk",
- 			"/google/flutter",
-@@ -337,7 +339,9 @@ export class SdkUtils {
- 		// TODO: This has gotten very messy and needs tidying up...
- 
- 		let firstFlutterProject: string | undefined;
-+		let firstDartNativeProject: string | undefined;
- 		let hasAnyFlutterProject = false;
-+		let hasAnyDartNativeProject = false;
- 		let hasAnyWebProject = false;
- 		let hasAnyStandardDartProject = false;
- 
-@@ -346,6 +350,7 @@ export class SdkUtils {
- 		// Scan through them all to figure out what type of projects we have.
- 		for (const folder of possibleProjects) {
- 			const hasPubspecFile = hasPubspec(folder);
-+			const refsDartNative = hasPubspecFile && projectReferencesDartNative(folder);
- 			const refsFlutter = hasPubspecFile && projectReferencesFlutter(folder);
- 			const refsWeb = false; // hasPubspecFile && referencesWeb(folder);
- 			const hasFlutterCreateProjectTriggerFile =
-@@ -359,13 +364,15 @@ export class SdkUtils {
- 
- 			const isSomethingFlutter = refsFlutter || hasFlutterCreateProjectTriggerFile || isFlutterRepo;
- 
--			const kind = isSomethingFlutter ? "Flutter" : "non-Flutter";
--			this.logger.info(`Found ${kind} project at ${folder} (Pubspec? ${hasPubspecFile}, Mobile? ${refsFlutter}, Create Trigger? ${hasFlutterCreateProjectTriggerFile}, Flutter Repo? ${isFlutterRepo})`);
-+			const kind = refsDartNative ? "DartNative" : isSomethingFlutter ? "Flutter" : "non-Flutter";
-+			this.logger.info(`Found ${kind} project at ${folder} (Pubspec? ${hasPubspecFile}, DartNative? ${refsDartNative}, Mobile? ${refsFlutter}, Create Trigger? ${hasFlutterCreateProjectTriggerFile}, Flutter Repo? ${isFlutterRepo})`);
- 
--			// Track the first Flutter Project so we can try finding the Flutter SDK from its packages file.
-+			// Track the first DartNative / Flutter Project so we can try finding the Flutter SDK from its packages file.
-+			firstDartNativeProject = firstDartNativeProject || (refsDartNative ? folder : undefined);
- 			firstFlutterProject = firstFlutterProject || (isSomethingFlutter ? folder : undefined);
- 
- 			// Set some flags we'll use to construct the workspace, so we know what things we need to light up.
-+			hasAnyDartNativeProject = hasAnyDartNativeProject || refsDartNative;
- 			hasAnyFlutterProject = hasAnyFlutterProject || isSomethingFlutter;
- 			hasAnyWebProject = hasAnyWebProject || refsWeb;
- 			hasAnyStandardDartProject = hasAnyStandardDartProject || (!isSomethingFlutter && hasPubspecFile);
-@@ -398,8 +405,27 @@ export class SdkUtils {
+@@ -398,8 +398,34 @@ export class SdkUtils {
  				this.logger.info(`Found Fuchsia project that is not vanilla Flutter`);
  		}
  
--		let flutterSdkPath;
--		if (workspaceConfig.forceFlutterWorkspace) {
 +		let dartNativeSdkPath: string | undefined;
-+		if (hasAnyDartNativeProject) {
++		// Always search for a DartNative SDK when any hint is available: user config,
++		// project dependencies, environment variable, or the default ~/zero location.
++		const configuredDnPath = config.flutterSdkPath; // dartx.dartNativeSdkPath maps to flutterSdkPath via renamedSettingKeys.
++		const hasAnyDnHint = !!(configuredDnPath || process.env.DARTNATIVE_ROOT || process.env.FLUTTER_ROOT);
++		const firstDartNativeProject = firstFlutterProject; // DartNative projects are detected as Flutter projects.
++		if (hasAnyDnHint || firstDartNativeProject) {
 +			const dartNativeSearchPaths = [
++				configuredDnPath,
 +				firstDartNativeProject && extractFlutterSdkPathFromPackagesFile(firstDartNativeProject),
 +				...paths,
 +				process.env.DARTNATIVE_ROOT,
 +				"~/zero",
 +			].filter(notUndefined);
 +
-+			const dnResult = this.findDartNativeSdk(dartNativeSearchPaths);
-+			dartNativeSdkPath = dnResult.sdkPath;
-+			if (dartNativeSdkPath) {
-+				this.logger.info(`Resolved DartNative SDK at ${dartNativeSdkPath}. Locking Flutter & Dart SDK paths to this SDK to prevent collisions.`);
++			const dnResult = this.findFlutterSdk(dartNativeSearchPaths);
++			if (dnResult.sdkPath) {
++				dartNativeSdkPath = dnResult.sdkPath;
++				this.logger.info(`Resolved DartNative SDK at ${dartNativeSdkPath}. Auto-resolving Flutter & Dart SDK paths to this SDK to prevent collisions.`);
 +			}
 +		}
 +
-+		let flutterSdkPath: string | undefined;
+ 		let flutterSdkPath;
+-		if (workspaceConfig.forceFlutterWorkspace) {
 +		if (dartNativeSdkPath) {
++			// DartNative SDK found: use it as the Flutter SDK and enable Flutter tooling.
 +			hasAnyFlutterProject = true;
 +			flutterSdkPath = dartNativeSdkPath;
 +		} else if (workspaceConfig.forceFlutterWorkspace) {
  			hasAnyFlutterProject = true;
  			flutterSdkPath = workspaceConfig?.flutterSdkHome;
  		} else {
-@@ -450,7 +476,7 @@ export class SdkUtils {
- 		// If we're a Flutter workspace, ensure Flutter is initialized.
- 		// Do this before searching for the Dart SDK, as it might download the Dart SDK we'd like to find.
- 		let hasAttemptedFlutterInitialization = false;
--		if (hasAnyFlutterProject && flutterSdkPath && !workspaceConfig.skipFlutterInitialization) {
-+		if (!dartNativeSdkPath && hasAnyFlutterProject && flutterSdkPath && !workspaceConfig.skipFlutterInitialization) {
- 			hasAttemptedFlutterInitialization = true;
- 			await ensureFlutterInitialized(this.logger, path.join(flutterSdkPath, flutterPath));
- 		}
-@@ -458,23 +484,29 @@ export class SdkUtils {
- 		// User provided custom command to obtain the sdk path
- 		const dartSdkPathFromCommand = config.getDartSdkCommand && await this.runCustomGetSDKCommand(config.getDartSdkCommand, "dart.getDartSdkCommand", !!config.workspaceGetDartSdkCommand);
- 
--		const dartSdkSearchPaths = [
--			// TODO: These could move into processFuchsiaWorkspace and be set on the config?
--			fuchsiaRoot && path.join(fuchsiaRoot, "topaz/tools/prebuilt-dart-sdk", `${dartPlatformName}-x64`),
--			fuchsiaRoot && path.join(fuchsiaRoot, "third_party/dart/tools/sdks/dart-sdk"),
--			fuchsiaRoot && path.join(fuchsiaRoot, "third_party/dart/tools/sdks", dartPlatformName, "dart-sdk"),
--			fuchsiaRoot && path.join(fuchsiaRoot, "dart/tools/sdks", dartPlatformName, "dart-sdk"),
--			firstFlutterProject && flutterSdkPath && path.join(flutterSdkPath, "bin/cache/dart-sdk"),
--			config.sdkPath,
--			dartSdkPathFromCommand?.path,
--		].concat(paths)
--			// The above array only has the Flutter SDK	in the search path if we KNOW it's a flutter
--			// project, however this doesn't cover the activating-to-run-flutter.createProject so
--			// we need to always look in the flutter SDK, but only AFTER the users PATH so that
--			// we don't prioritise it over any real Dart versions.
--			.concat([flutterSdkPath && path.join(flutterSdkPath, "bin/cache/dart-sdk")])
--			.concat([workspaceConfig.defaultDartSdk])
--			.filter(notUndefined);
-+		const dartSdkSearchPaths = (dartNativeSdkPath
-+			? [
-+				path.join(dartNativeSdkPath, "bin/cache/dart-sdk"),
-+				path.join(dartNativeSdkPath, "bin"),
-+				dartNativeSdkPath,
-+			]
-+			: [
-+				// TODO: These could move into processFuchsiaWorkspace and be set on the config?
-+				fuchsiaRoot && path.join(fuchsiaRoot, "topaz/tools/prebuilt-dart-sdk", `${dartPlatformName}-x64`),
-+				fuchsiaRoot && path.join(fuchsiaRoot, "third_party/dart/tools/sdks/dart-sdk"),
-+				fuchsiaRoot && path.join(fuchsiaRoot, "third_party/dart/tools/sdks", dartPlatformName, "dart-sdk"),
-+				fuchsiaRoot && path.join(fuchsiaRoot, "dart/tools/sdks", dartPlatformName, "dart-sdk"),
-+				firstFlutterProject && flutterSdkPath && path.join(flutterSdkPath, "bin/cache/dart-sdk"),
-+				config.sdkPath,
-+				dartSdkPathFromCommand?.path,
-+			].concat(paths)
-+				// The above array only has the Flutter SDK	in the search path if we KNOW it's a flutter
-+				// project, however this doesn't cover the activating-to-run-flutter.createProject so
-+				// we need to always look in the flutter SDK, but only AFTER the users PATH so that
-+				// we don't prioritise it over any real Dart versions.
-+				.concat([flutterSdkPath && path.join(flutterSdkPath, "bin/cache/dart-sdk")])
-+				.concat([workspaceConfig.defaultDartSdk])
-+		).filter(notUndefined);
- 
- 		// Since we just blocked on a lot of sync FS, yield.
- 		await resolvedPromise;
-@@ -544,6 +576,8 @@ export class SdkUtils {
- 			hasAnyStandardDartProject,
- 			!!fuchsiaRoot && hasAnyStandardDartProject,
- 			firstFlutterProject,
-+			hasAnyDartNativeProject,
-+			firstDartNativeProject,
- 		);
- 	}
- 
-@@ -634,15 +668,30 @@ export class SdkUtils {
- 		return this.searchPaths(folders, executableNames.dart, (p) => this.containsFile(p, dartVMPath) && this.containsFile(p, analyzerSnapshotPath));
- 	}
- 
-+	private findDartNativeSdk(folders: string[]): SdkSearchResults {
-+		return this.searchPaths(
-+			folders,
-+			executableNames.dn,
-+			(p) => (this.containsFile(p, "bin/" + executableNames.dn) || this.containsFile(p, executableNames.dn)) && (
-+				this.containsFile(p, "analysis_options.yaml")
-+				|| this.containsFile(p, "bin/dn")
-+				|| this.containsFile(p, "bin/dn.bat")
-+				|| this.containsFile(p, "bin/flutter")
-+			),
-+		);
-+	}
-+
- 	private findFlutterSdk(folders: string[]): SdkSearchResults {
- 		return this.searchPaths(
+@@ -639,10 +665,13 @@ export class SdkUtils {
  			folders,
  			executableNames.flutter,
  			// Also check for some additional files so we won't detect `/usr/bin/flutter` as a Flutter SDK at `/usr`.
 -			(p) => this.containsFile(p, flutterPath) && (
-+			(p) => (this.containsFile(p, flutterPath) || this.containsFile(p, "bin/" + executableNames.dn)) && (
++			// Accept bin/dn as an equivalent indicator for DartNative SDKs.
++			(p) => (this.containsFile(p, flutterPath) || this.containsFile(p, "bin/dn") || this.containsFile(p, "bin/dn.bat")) && (
  				this.containsFile(p, "analysis_options.yaml")
  				|| this.containsFile(p, "bin/flutter.bat") // Exists on non-Windows clones of Git and is an obvious sign of the SDK.
  				|| this.containsFile(p, "bin/internal/engine.version")
@@ -1640,41 +1569,48 @@ index 87d7e68a..f39c79dd 100644
  			),
  		);
  	}
-@@ -680,7 +729,13 @@ export class SdkUtils {
+@@ -679,8 +708,15 @@ export class SdkUtils {
+ 		for (const p of sdkPaths)
  			this.logger.info(`        ${this.sdkDisplayString(p)}`);
  
- 		// Restrict only to the paths that have the executable.
+-		// Restrict only to the paths that have the executable.
 -		sdkPaths = sdkPaths.filter((p) => fs.existsSync(path.join(p.sdkPath, executableFilename)));
++		// Restrict only to the paths that have the executable (or dn as an alternative for DartNative SDKs).
 +		sdkPaths = sdkPaths.filter((p) => {
 +			if (fs.existsSync(path.join(p.sdkPath, executableFilename)))
 +				return true;
-+			if (executableFilename === executableNames.flutter && (fs.existsSync(path.join(p.sdkPath, executableNames.dn)) || fs.existsSync(path.join(p.sdkPath, "dn"))))
++			// For Flutter searches, also accept dn as the entry point binary.
++			if (executableFilename === executableNames.flutter && (fs.existsSync(path.join(p.sdkPath, "dn")) || fs.existsSync(path.join(p.sdkPath, "dn.bat"))))
 +				return true;
 +			return false;
 +		});
  
  		this.logger.info(`    Found at:`);
  		for (const p of sdkPaths)
-@@ -694,7 +749,11 @@ export class SdkUtils {
+@@ -694,7 +730,15 @@ export class SdkUtils {
  		// Convert all the paths to their resolved locations.
  		sdkPaths = sdkPaths.map((sdkPath): SdkSearchResult => {
  			// In order to handle symlinks on the binary (not folder), we need to add the executableName before calling realpath.
 -			const fullPath = path.join(sdkPath.sdkPath, executableFilename);
++			// For DartNative, prefer dn over flutter when resolving symlinks.
 +			let effectiveExec = executableFilename;
-+			if (!fs.existsSync(path.join(sdkPath.sdkPath, effectiveExec)) && executableFilename === executableNames.flutter && fs.existsSync(path.join(sdkPath.sdkPath, executableNames.dn)))
-+				effectiveExec = executableNames.dn;
-+
++			if (executableFilename === executableNames.flutter && !fs.existsSync(path.join(sdkPath.sdkPath, executableFilename))) {
++				if (fs.existsSync(path.join(sdkPath.sdkPath, "dn")))
++					effectiveExec = "dn";
++				else if (fs.existsSync(path.join(sdkPath.sdkPath, "dn.bat")))
++					effectiveExec = "dn.bat";
++			}
 +			const fullPath = path.join(sdkPath.sdkPath, effectiveExec);
  			const realExecutableLocation = safeRealpathSync(fullPath);
  
  			if (realExecutableLocation.toLowerCase() !== fullPath.toLowerCase())
-@@ -704,8 +763,8 @@ export class SdkUtils {
+@@ -704,8 +748,8 @@ export class SdkUtils {
  			// and we should return as-is rather than walk up two levels, as we
  			// may want to use the presence of this to trigger initialisation.
  			const targetBaseName = path.basename(realExecutableLocation);
 -			if (targetBaseName !== executableFilename) {
 -				this.logger.info(`Target ${targetBaseName} is not ${executableFilename}, assuming ${fullPath} is a package manager init script`);
-+			if (targetBaseName !== effectiveExec && !(effectiveExec === executableNames.dn && targetBaseName.startsWith("flutter")) && !(effectiveExec === executableNames.flutter && targetBaseName.startsWith("dn"))) {
++			if (targetBaseName !== effectiveExec && !(effectiveExec === "dn" && targetBaseName.startsWith("flutter")) && !(effectiveExec === executableNames.flutter && targetBaseName.startsWith("dn"))) {
 +				this.logger.info(`Target ${targetBaseName} is not ${effectiveExec}, assuming ${fullPath} is a package manager init script`);
  				sdkInitScript = fullPath;
  				return { originalPath: sdkPath.originalPath, sdkPath: fullPath };
@@ -1737,7 +1673,7 @@ index 79ce00e7..fa8875f5 100644
  	return logPath
  		? logPath.replace(/\${name}/ig, filenameSafe(args.name || "unnamed-session"))
 diff --git a/src/extension/utils/processes.ts b/src/extension/utils/processes.ts
-index 2b011e5f..0b789496 100644
+index 2b011e5f..3f2a3df1 100644
 --- a/src/extension/utils/processes.ts
 +++ b/src/extension/utils/processes.ts
 @@ -1,3 +1,6 @@
@@ -1747,8 +1683,12 @@ index 2b011e5f..0b789496 100644
  import * as vs from "vscode";
  import { isDartCodeTestRun } from "../../shared/constants";
  import { Logger, SpawnedProcess } from "../../shared/interfaces";
-@@ -10,12 +13,29 @@ let toolEnv: Record<string, string> = {};
+@@ -8,14 +11,35 @@ import { dashIdeEnvironment, dashIdeName, dashIdeVersion, dashPluginName, dashPl
+ let flutterRoot: string | undefined;
+ let toolEnv: Record<string, string> = {};
  let globalFlutterArgs: string[] = [];
++// Extra PATH entries to prepend for Dart/DartNative SDK bins.
++let sdkBinPaths: string[] = [];
  
  /**
 - * Returns a copy of the tool env object.
@@ -1762,7 +1702,9 @@ index 2b011e5f..0b789496 100644
 +	const extraPaths = ["/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".gem/bin")].filter((p) => fs.existsSync(p));
 +	const currentPathSegments = currentPath.split(path.delimiter);
 +	const pathsToAdd = extraPaths.filter((p) => !currentPathSegments.includes(p));
-+	const effectivePath = [...pathsToAdd, currentPath].filter((p) => p.length > 0).join(path.delimiter);
++	// Prepend SDK bin paths so spawned processes prefer the configured SDK.
++	const sdkPathsToAdd = sdkBinPaths.filter((p) => p && !currentPathSegments.includes(p) && fs.existsSync(p));
++	const effectivePath = [...sdkPathsToAdd, ...pathsToAdd, currentPath].filter((p) => p.length > 0).join(path.delimiter);
 +
 +	const env: Record<string, string> = {};
 +	for (const key of Object.keys(process.env)) {
@@ -1779,6 +1721,38 @@ index 2b011e5f..0b789496 100644
  }
  
  export function getGlobalFlutterArgs() {
+@@ -27,6 +51,14 @@ export function setFlutterRoot(root: string) {
+ 	flutterRoot = root;
+ }
+ 
++/**
++ * Records the DartNative SDK bin paths so they are prepended to PATH
++ * for spawned processes (SDK bin + embedded Dart SDK bin).
++ */
++export function setSdkBinPaths(binPaths: string[]) {
++	sdkBinPaths = binPaths;
++}
++
+ export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnalytics: boolean, envOverrides?: any }) {
+ 	toolEnv = {};
+ 	globalFlutterArgs = [];
+@@ -40,12 +72,14 @@ export function setupToolEnv({ suppressAnalytics, envOverrides }: { suppressAnal
+ 		globalFlutterArgs.push("--suppress-analytics");
+ 	}
+ 
+-	// Always set FLUTTER_ROOT to match the SDK we are using if we have one.
++	// Always set FLUTTER_ROOT and DARTNATIVE_ROOT to match the SDK we are using if we have one.
+ 	// We used to only set this if it wasn't already, and there wasn't one on the global process, but
+ 	// this means if the user has an invalid path set (or a different version of the SDK), things could
+ 	// fail oddly.
+-	if (flutterRoot)
++	if (flutterRoot) {
+ 		toolEnv.FLUTTER_ROOT = flutterRoot;
++		toolEnv.DARTNATIVE_ROOT = flutterRoot;
++	}
+ 
+ 	// Add the names/versions of each part of the tool.
+ 	toolEnv.DASH__IDE_NAME = dashIdeName();
 diff --git a/src/extension/views/devtools/sidebar.ts b/src/extension/views/devtools/sidebar.ts
 index 439fbec4..26a63019 100644
 --- a/src/extension/views/devtools/sidebar.ts

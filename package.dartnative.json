@@ -166,6 +166,9 @@
 		"dart.offline": {
 			"description": "Whether to use the --offline switch for commands like 'pub get' and 'DartNative: Create New Project'."
 		},
+		"dart.pubAdditionalArgs": {
+			"description": "Additional args to pass to all `pub` commands (such as `dn pub get`, `flutter pub get`, or `dart pub get`)."
+		},
 		"dart.flutterGutterIcons": {
 			"description": "Whether to show DartNative icons and colors in the editor gutter."
 		},
