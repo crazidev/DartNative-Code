@@ -13,6 +13,8 @@ export class WorkspaceContext implements IAmDisposable {
 		public readonly hasAnyStandardDartProjects: boolean,
 		public readonly hasProjectsInFuchsiaTree: boolean,
 		public readonly firstFlutterProject: string | undefined,
+		public readonly hasAnyDartNativeProjects = false,
+		public readonly firstDartNativeProject: string | undefined = undefined,
 	) {
 		this.workspaceTypeDescription = this.buildWorkspaceTypeDescription();
 	}

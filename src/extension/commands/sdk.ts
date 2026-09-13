@@ -2,12 +2,14 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vs from "vscode";
 import { DartCapabilities } from "../../shared/capabilities/dart";
-import { dartVMPath, ExtensionRestartReason, flutterPath, thirtySecondsInMs } from "../../shared/constants";
+import { dartVMPath, executableNames, ExtensionRestartReason, flutterPath, thirtySecondsInMs } from "../../shared/constants";
 import { LogCategory } from "../../shared/enums";
 import { CustomScript, DartSdks, DartWorkspaceContext, IAmDisposable, Logger, SpawnedProcess } from "../../shared/interfaces";
 import { logProcess } from "../../shared/logging";
 import { getPubExecutionInfo, RunProcessResult } from "../../shared/processes";
 import { disposeAll, nullToUndefined, PromiseCompleter, usingCustomScript } from "../../shared/utils";
+import { fsPath } from "../../shared/utils/fs";
+import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
 import { getPackageOrFolderDisplayName } from "../../shared/vscode/display_names";
 import { OperationProgress } from "../../shared/vscode/interfaces";
 import { Context } from "../../shared/vscode/workspace";
@@ -56,35 +58,79 @@ export class BaseSdkCommands implements IAmDisposable {
 	}
 
 	public runFlutter(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
-		return this.runCommandForWorkspace(this.runFlutterInFolder.bind(this), `Select the folder to run "flutter ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
+		const isDartNative = selection && isDartNativeProjectFolder(fsPath(selection));
+		const toolName = isDartNative ? "dn" : "flutter";
+		return this.runCommandForWorkspace(this.runFlutterInFolder.bind(this), `Select the folder to run "${toolName} ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
 	}
 
 	public runFlutterInFolder(folder: string, args: string[], packageOrFolderDisplayName: string | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, customScript?: CustomScript): Promise<RunProcessResult | undefined> {
 		if (!this.sdks.flutter)
 			throw new Error("Flutter SDK not available");
 
+		const isDartNative = isDartNativeProjectFolder(folder);
+		const dnBinaryPath = path.join(this.sdks.flutter, "bin", executableNames.dn);
+		const flutterBinaryPath = path.join(this.sdks.flutter, flutterPath);
+		const defaultExec = isDartNative && fs.existsSync(dnBinaryPath)
+			? dnBinaryPath
+			: flutterBinaryPath;
+
 		const execution = usingCustomScript(
-			path.join(this.sdks.flutter, flutterPath),
+			defaultExec,
 			args,
 			customScript,
 		);
 
-		const allArgs = getGlobalFlutterArgs()
-			.concat(config.for(vs.Uri.file(folder)).flutterAdditionalArgs)
-			.concat(execution.args);
+		const folderConfig = config.for(vs.Uri.file(folder));
+		// For DartNative projects, skip the Flutter-specific global args and use DartNative args instead.
+		// Identify the subcommand (first arg) to know which additional args apply.
+		const subcommand = args[0];
+		const pubArgs = subcommand === "pub"
+			? folderConfig.pubAdditionalArgs
+			: [];
+		let allArgs: string[];
+		if (isDartNative) {
+			// Global DartNative args come first, then subcommand-specific args, then the execution args, then pub args.
+			const globalArgs = folderConfig.flutterAdditionalArgs; // dartNativeAdditionalArgs via renamedSettingKeys.
+			const subcommandArgs = subcommand === "test"
+				? folderConfig.flutterTestAdditionalArgs // dartNativeTestAdditionalArgs.
+				: subcommand === "run"
+					? folderConfig.flutterRunAdditionalArgs // dartNativeRunAdditionalArgs.
+					: [];
+			allArgs = globalArgs.concat(subcommandArgs).concat(execution.args).concat(pubArgs);
+		} else {
+			allArgs = getGlobalFlutterArgs()
+				.concat(folderConfig.flutterAdditionalArgs)
+				.concat(execution.args)
+				.concat(pubArgs);
+		}
 
 		return this.runCommandInFolder(packageOrFolderDisplayName, folder, execution.executable, allArgs, alwaysShowOutput, operationProgress);
 	}
 
 	public runPub(args: string[], selection: vs.Uri | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<RunProcessResult | undefined> {
-		return this.runCommandForWorkspace(this.runPubInFolder.bind(this), `Select the folder to run "pub ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
+		const isDartNative = selection && isDartNativeProjectFolder(fsPath(selection));
+		const toolName = isDartNative ? "dn pub" : "pub";
+		return this.runCommandForWorkspace(this.runPubInFolder.bind(this), `Select the folder to run "${toolName} ${args.join(" ")}" in`, args, selection, alwaysShowOutput, operationProgress, { onlyShowWorkspaceRoots });
 	}
 
 	protected runPubInFolder(folder: string, args: string[], packageOrFolderDisplayName: string, alwaysShowOutput = false, operationProgress?: OperationProgress): Promise<RunProcessResult | undefined> {
+		const isDartNative = isDartNativeProjectFolder(folder);
+		const folderConfig = config.for(vs.Uri.file(folder));
+		const pubAdditional = folderConfig.pubAdditionalArgs;
+
+		if (isDartNative && this.sdks.flutter) {
+			const dnBinary = path.join(this.sdks.flutter, "bin", executableNames.dn);
+			if (fs.existsSync(dnBinary)) {
+				const globalArgs = folderConfig.flutterAdditionalArgs;
+				const dnArgs = globalArgs.concat(["pub", ...args]).concat(pubAdditional);
+				return this.runCommandInFolder(packageOrFolderDisplayName, folder, dnBinary, dnArgs, alwaysShowOutput, operationProgress);
+			}
+		}
+
 		if (!this.sdks.dart)
 			throw new Error("Dart SDK not available");
 
-		args = args.concat(...config.for(vs.Uri.file(folder)).pubAdditionalArgs);
+		args = args.concat(...pubAdditional);
 
 		const pubExecution = getPubExecutionInfo(this.sdks.dart, args);
 
@@ -138,6 +184,10 @@ export class BaseSdkCommands implements IAmDisposable {
 						channel.show(true);
 				});
 
+				if (alwaysShowOutput) {
+					proc.on("close", () => channel.show());
+				}
+
 				return proc;
 			}, existingProcess);
 			this.runningCommands[commandId] = process;
@@ -166,10 +216,10 @@ export class SdkCommands extends BaseSdkCommands {
 		super(logger, context, workspace, dartCapabilities);
 		const dartSdkManager = new DartSdkManager(this.logger, this.workspace.sdks);
 		this.disposables.push(vs.commands.registerCommand("dart.changeSdk", () => dartSdkManager.changeSdk()));
-		if (workspace.hasAnyFlutterProjects) {
-			const flutterSdkManager = new FlutterSdkManager(this.logger, workspace.sdks);
-			this.disposables.push(vs.commands.registerCommand("dart.changeFlutterSdk", () => flutterSdkManager.changeSdk()));
-		}
+		// Register the Flutter/DartNative SDK switcher unconditionally so it is always available,
+		// even before a project is opened (users may have dartNativeSdkPaths pre-configured).
+		const flutterSdkManager = new FlutterSdkManager(this.logger, workspace.sdks);
+		this.disposables.push(vs.commands.registerCommand("dart.changeFlutterSdk", () => flutterSdkManager.changeSdk()));
 
 		// Monitor version files for SDK upgrades.
 		void this.setupVersionWatcher();

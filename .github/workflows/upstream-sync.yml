@@ -1,9 +1,9 @@
 name: Upstream Sync Compatibility Check
 
 on:
-  schedule:
-    # Runs every Monday at 06:00 UTC to catch weekly upstream changes.
-    - cron: "0 6 * * 1"
+  # schedule:
+  # Runs every Monday at 06:00 UTC to catch weekly upstream changes.
+  # - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
       upstream_branch:

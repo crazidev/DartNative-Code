@@ -398,8 +398,34 @@ export class SdkUtils {
 				this.logger.info(`Found Fuchsia project that is not vanilla Flutter`);
 		}
 
+		let dartNativeSdkPath: string | undefined;
+		// Always search for a DartNative SDK when any hint is available: user config,
+		// project dependencies, environment variable, or the default ~/zero location.
+		const configuredDnPath = config.flutterSdkPath; // dartx.dartNativeSdkPath maps to flutterSdkPath via renamedSettingKeys.
+		const hasAnyDnHint = !!(configuredDnPath || process.env.DARTNATIVE_ROOT || process.env.FLUTTER_ROOT);
+		const firstDartNativeProject = firstFlutterProject; // DartNative projects are detected as Flutter projects.
+		if (hasAnyDnHint || firstDartNativeProject) {
+			const dartNativeSearchPaths = [
+				configuredDnPath,
+				firstDartNativeProject && extractFlutterSdkPathFromPackagesFile(firstDartNativeProject),
+				...paths,
+				process.env.DARTNATIVE_ROOT,
+				"~/zero",
+			].filter(notUndefined);
+
+			const dnResult = this.findFlutterSdk(dartNativeSearchPaths);
+			if (dnResult.sdkPath) {
+				dartNativeSdkPath = dnResult.sdkPath;
+				this.logger.info(`Resolved DartNative SDK at ${dartNativeSdkPath}. Auto-resolving Flutter & Dart SDK paths to this SDK to prevent collisions.`);
+			}
+		}
+
 		let flutterSdkPath;
-		if (workspaceConfig.forceFlutterWorkspace) {
+		if (dartNativeSdkPath) {
+			// DartNative SDK found: use it as the Flutter SDK and enable Flutter tooling.
+			hasAnyFlutterProject = true;
+			flutterSdkPath = dartNativeSdkPath;
+		} else if (workspaceConfig.forceFlutterWorkspace) {
 			hasAnyFlutterProject = true;
 			flutterSdkPath = workspaceConfig?.flutterSdkHome;
 		} else {
@@ -639,10 +665,13 @@ export class SdkUtils {
 			folders,
 			executableNames.flutter,
 			// Also check for some additional files so we won't detect `/usr/bin/flutter` as a Flutter SDK at `/usr`.
-			(p) => this.containsFile(p, flutterPath) && (
+			// Accept bin/dn as an equivalent indicator for DartNative SDKs.
+			(p) => (this.containsFile(p, flutterPath) || this.containsFile(p, "bin/dn") || this.containsFile(p, "bin/dn.bat")) && (
 				this.containsFile(p, "analysis_options.yaml")
 				|| this.containsFile(p, "bin/flutter.bat") // Exists on non-Windows clones of Git and is an obvious sign of the SDK.
 				|| this.containsFile(p, "bin/internal/engine.version")
+				|| this.containsFile(p, "bin/dn")
+				|| this.containsFile(p, "bin/dn.bat")
 			),
 		);
 	}
@@ -679,8 +708,15 @@ export class SdkUtils {
 		for (const p of sdkPaths)
 			this.logger.info(`        ${this.sdkDisplayString(p)}`);
 
-		// Restrict only to the paths that have the executable.
-		sdkPaths = sdkPaths.filter((p) => fs.existsSync(path.join(p.sdkPath, executableFilename)));
+		// Restrict only to the paths that have the executable (or dn as an alternative for DartNative SDKs).
+		sdkPaths = sdkPaths.filter((p) => {
+			if (fs.existsSync(path.join(p.sdkPath, executableFilename)))
+				return true;
+			// For Flutter searches, also accept dn as the entry point binary.
+			if (executableFilename === executableNames.flutter && (fs.existsSync(path.join(p.sdkPath, "dn")) || fs.existsSync(path.join(p.sdkPath, "dn.bat"))))
+				return true;
+			return false;
+		});
 
 		this.logger.info(`    Found at:`);
 		for (const p of sdkPaths)
@@ -694,7 +730,15 @@ export class SdkUtils {
 		// Convert all the paths to their resolved locations.
 		sdkPaths = sdkPaths.map((sdkPath): SdkSearchResult => {
 			// In order to handle symlinks on the binary (not folder), we need to add the executableName before calling realpath.
-			const fullPath = path.join(sdkPath.sdkPath, executableFilename);
+			// For DartNative, prefer dn over flutter when resolving symlinks.
+			let effectiveExec = executableFilename;
+			if (executableFilename === executableNames.flutter && !fs.existsSync(path.join(sdkPath.sdkPath, executableFilename))) {
+				if (fs.existsSync(path.join(sdkPath.sdkPath, "dn")))
+					effectiveExec = "dn";
+				else if (fs.existsSync(path.join(sdkPath.sdkPath, "dn.bat")))
+					effectiveExec = "dn.bat";
+			}
+			const fullPath = path.join(sdkPath.sdkPath, effectiveExec);
 			const realExecutableLocation = safeRealpathSync(fullPath);
 
 			if (realExecutableLocation.toLowerCase() !== fullPath.toLowerCase())
@@ -704,8 +748,8 @@ export class SdkUtils {
 			// and we should return as-is rather than walk up two levels, as we
 			// may want to use the presence of this to trigger initialisation.
 			const targetBaseName = path.basename(realExecutableLocation);
-			if (targetBaseName !== executableFilename) {
-				this.logger.info(`Target ${targetBaseName} is not ${executableFilename}, assuming ${fullPath} is a package manager init script`);
+			if (targetBaseName !== effectiveExec && !(effectiveExec === "dn" && targetBaseName.startsWith("flutter")) && !(effectiveExec === executableNames.flutter && targetBaseName.startsWith("dn"))) {
+				this.logger.info(`Target ${targetBaseName} is not ${effectiveExec}, assuming ${fullPath} is a package manager init script`);
 				sdkInitScript = fullPath;
 				return { originalPath: sdkPath.originalPath, sdkPath: fullPath };
 			}

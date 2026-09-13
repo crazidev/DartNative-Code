@@ -28,6 +28,7 @@ import { ExtensionRecommentations } from "../../recommendations/recommendations"
 import { getExcludedFolders } from "../../utils";
 import { getToolEnv } from "../../utils/processes";
 import { SidebarDevTools } from "../../views/devtools/sidebar_devtools";
+import { isDartNativeDebugSession, isDevToolsPageSupportedForDartNative } from "../../dartnative";
 import { exposeWebViewUrls, WebViewUrls } from "../../views/shared";
 import { DevToolsEmbeddedView, DevToolsEmbeddedViewOrSidebarView } from "./embedded_view";
 
@@ -142,7 +143,28 @@ export class DevToolsManager implements IAmDisposable {
 		}
 	}
 
+	private isDartNativeEnvironment(session?: DartDebugSessionInformation): boolean {
+		if (this.context.workspaceContext.hasAnyDartNativeProjects)
+			return true;
+		if (session && isDartNativeDebugSession({
+			cwd: session.session.configuration.cwd,
+			program: session.session.configuration.program,
+			sessionName: session.session.name,
+			workspaceFolderUri: session.session.workspaceFolder?.uri,
+		})) {
+			return true;
+		}
+		return debugSessions.some((s) => isDartNativeDebugSession({
+			cwd: s.session.configuration.cwd,
+			program: s.session.configuration.program,
+			sessionName: s.session.name,
+			workspaceFolderUri: s.session.workspaceFolder?.uri,
+		}));
+	}
+
 	public isPageAvailable(hasSession: boolean, page: DevToolsPage) {
+		if (this.isDartNativeEnvironment() && !isDevToolsPageSupportedForDartNative(page.id))
+			return false;
 		if (page.requiresFlutter && !this.context.workspaceContext.hasAnyFlutterProjects)
 			return false;
 		if (page.requiredDartSdkVersion && this.context.workspaceContext.sdks.dartVersion && !versionIsAtLeast(this.context.workspaceContext.sdks.dartVersion, page.requiredDartSdkVersion))
@@ -167,7 +189,11 @@ export class DevToolsManager implements IAmDisposable {
 		const base = await this.devtoolsUrl;
 		if (!base) return base;
 
-		const queryString = this.buildQueryString(this.getDefaultQueryParams());
+		const queryParams = this.getDefaultQueryParams();
+		if (this.isDartNativeEnvironment() || page === "editorSidebar") {
+			queryParams.hide = "inspector,performance,cpu-profiler,deep-links";
+		}
+		const queryString = this.buildQueryString(queryParams);
 		const separator = base.endsWith("/") ? "" : "/";
 		return `${base}${separator}${page}?${queryString}`;
 	}
@@ -333,6 +359,10 @@ export class DevToolsManager implements IAmDisposable {
 	}
 
 	private getDefaultPage(): DevToolsPage {
+		if (this.isDartNativeEnvironment()) {
+			const memoryPage = devToolsPages.find((p) => p.id === "memory");
+			return memoryPage ?? devToolsHomePage;
+		}
 		// use true for hasSession here, because this page is available with or without if it
 		// meets the version requirements.
 		return this.isPageAvailable(true, devToolsHomePage)
@@ -357,6 +387,10 @@ export class DevToolsManager implements IAmDisposable {
 			inspectorRef: options.inspectorRef,
 			theme: config.useDevToolsDarkTheme && options.location === "external" ? "dark" : undefined,
 		};
+
+		if (this.isDartNativeEnvironment(session) || options.commandSource === CommandSource.touchbar) {
+			queryParams.hide = "inspector,performance,cpu-profiler,deep-links";
+		}
 
 		const pageId = options.pageId ?? this.getDefaultPage().id;
 		const page = devToolsPages.find((p) => p.id === pageId);
@@ -411,6 +445,7 @@ export class DevToolsManager implements IAmDisposable {
 			ide: "VSCode",
 			dashTool: dashTool(),
 			dashIdeName: dashIdeName(),
+			hide: this.isDartNativeEnvironment() ? "inspector,performance,cpu-profiler,deep-links" : undefined,
 		};
 	}
 

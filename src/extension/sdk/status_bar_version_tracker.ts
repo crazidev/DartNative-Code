@@ -13,14 +13,17 @@ export class StatusBarVersionTracker implements IAmDisposable {
 		const isFlutter = workspaceContext.hasAnyFlutterProjects;
 		const dartIsFromFlutter = workspaceContext.sdks.dartSdkIsFromFlutter;
 
-		const canChangeFlutterSdk = config.flutterSdkPaths && config.flutterSdkPaths.length > 0;
+		// Use dartNativeSdkPaths when available (patched), fall back to flutterSdkPaths.
+		const dnSdkPaths = (config as any).dartNativeSdkPaths ?? config.flutterSdkPaths;
+		const canChangeFlutterSdk = dnSdkPaths && dnSdkPaths.length > 0;
 		const canChangeDartSdk = !isFlutter && config.sdkPaths && config.sdkPaths.length > 0;
 
 		const flutterVersion = this.versionOrLatest(workspaceContext.sdks.flutterVersion);
 		let dartVersion = this.versionOrLatest(workspaceContext.sdks.dartVersion);
 
+		// When the Dart SDK is bundled with DartNative, label it accordingly.
 		if (dartIsFromFlutter)
-			dartVersion = `${dartVersion} (Flutter)`;
+			dartVersion = `${dartVersion} (DartNative)`;
 
 		if (dartVersion) {
 			this.addStatusBarItem(
@@ -33,7 +36,7 @@ export class StatusBarVersionTracker implements IAmDisposable {
 		if (isFlutter && flutterVersion) {
 			this.addStatusBarItem(
 				"dart.flutterSdkVersion",
-				"Flutter",
+				"DartNative",
 				flutterVersion,
 				canChangeFlutterSdk ? "dart.changeFlutterSdk" : undefined,
 			);

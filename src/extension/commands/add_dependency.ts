@@ -193,12 +193,12 @@ export class AddDependencyCommand extends BaseSdkCommands {
 		}
 
 		for (const uri of uris) {
-			const useFlutter = this.sdks.flutter && (forceFlutter || util.isInsideFlutterProject(uri));
+			const useFlutter = this.sdks.flutter && (forceFlutter || util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri));
 			for (const commandArgs of commandsArgs) {
 				if (useFlutter) {
-					await this.runFlutter(["pub", ...commandArgs], uri);
+					await this.runFlutter(["pub", ...commandArgs], uri, true);
 				} else {
-					await this.runPub(commandArgs, uri);
+					await this.runPub(commandArgs, uri, true);
 				}
 			}
 		}
@@ -217,10 +217,10 @@ export class AddDependencyCommand extends BaseSdkCommands {
 
 		const args = ["remove", packageName];
 
-		if (this.sdks.flutter && util.isInsideFlutterProject(uri)) {
-			return this.runFlutter(["pub", ...args], uri);
+		if (this.sdks.flutter && (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))) {
+			return this.runFlutter(["pub", ...args], uri, true);
 		} else {
-			return this.runPub(args, uri);
+			return this.runPub(args, uri, true);
 		}
 	}
 

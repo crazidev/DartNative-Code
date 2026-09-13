@@ -731,8 +731,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
 		const isDebug = debugConfig.noDebug !== true;
 		const isAttach = debugConfig.request === "attach";
 		const isWeb = isWebDevice(debugConfig.deviceId);
+		// Detect DartNative debug sessions by the customTool pointing to dn binary.
+		const isDartNative = !!(debugConfig.customTool && path.basename(debugConfig.customTool).startsWith("dn"));
 
-		this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
+		if (!isDartNative)
+			this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
 		this.addArgsIfNotExist(args, ...conf.flutterAdditionalArgs);
 		if (isAttach)
 			this.addArgsIfNotExist(args, ...conf.flutterAttachAdditionalArgs);
@@ -804,8 +807,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
 
 	protected buildFlutterTestToolArgs(debugConfig: DartVsCodeLaunchArgs, conf: ResourceConfig): string[] {
 		const args: string[] = [];
+		// Detect DartNative debug sessions by the customTool pointing to dn binary.
+		const isDartNative = !!(debugConfig.customTool && path.basename(debugConfig.customTool).startsWith("dn"));
 
-		this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
+		if (!isDartNative)
+			this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
 		this.addArgsIfNotExist(args, ...conf.flutterAdditionalArgs);
 		this.addArgsIfNotExist(args, ...conf.flutterTestAdditionalArgs);
 

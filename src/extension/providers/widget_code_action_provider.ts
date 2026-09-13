@@ -8,24 +8,26 @@ export class WidgetCodeActionProvider implements vs.CodeActionProvider {
 		vs.CodeActionKind.Refactor,
 		vs.CodeActionKind.RefactorExtract,
 		vs.CodeActionKind.RefactorRewrite,
+		vs.CodeActionKind.QuickFix,
 	];
 
 	public provideCodeActions(
 		document: vs.TextDocument,
 		range: vs.Range | vs.Selection,
-		_context: vs.CodeActionContext,
+		context: vs.CodeActionContext,
 		_token: vs.CancellationToken,
 	): vs.CodeAction[] | undefined {
 		if (!config.enableWidgetRefactors) {
 			return undefined;
 		}
 
-		// Only run for Dart documents in Flutter or DartNative projects
-		if (!isInsideDartNativeProject(document.uri) && !isInsideFlutterProject(document.uri)) {
+		// Only run for Dart documents in Flutter or DartNative projects or files containing widgets
+		const isProjectMatch = isInsideDartNativeProject(document.uri) || isInsideFlutterProject(document.uri);
+		const code = document.getText();
+		if (!isProjectMatch && !code.includes("Widget") && !code.includes("State<") && !code.includes("dartnative") && !code.includes("flutter")) {
 			return undefined;
 		}
 
-		const code = document.getText();
 		const selectionStart = document.offsetAt(range.start);
 		const selectionEnd = document.offsetAt(range.end);
 
@@ -36,9 +38,12 @@ export class WidgetCodeActionProvider implements vs.CodeActionProvider {
 			return undefined;
 		}
 
+		const isQuickFixRequested = !!context?.only?.contains(vs.CodeActionKind.QuickFix);
+
 		return actions.map((action) => {
 			if (action.id === "dart.refactor.extractWidget" || action.kind === "refactor.extract") {
-				const ca = new vs.CodeAction(action.title, vs.CodeActionKind.RefactorExtract);
+				const caKind = isQuickFixRequested ? vs.CodeActionKind.QuickFix : vs.CodeActionKind.RefactorExtract;
+				const ca = new vs.CodeAction(action.title, caKind);
 				ca.command = {
 					arguments: [document, action.replaceRange],
 					command: "dart.refactor.extractWidget",
@@ -47,9 +52,12 @@ export class WidgetCodeActionProvider implements vs.CodeActionProvider {
 				return ca;
 			}
 
-			const kind = action.kind === "refactor.rewrite"
+			let kind = action.kind === "refactor.rewrite"
 				? vs.CodeActionKind.RefactorRewrite
 				: vs.CodeActionKind.Refactor;
+			if (isQuickFixRequested) {
+				kind = vs.CodeActionKind.QuickFix;
+			}
 			const ca = new vs.CodeAction(action.title, kind);
 			const edit = new vs.WorkspaceEdit();
 			const startPos = document.positionAt(action.replaceRange.start);

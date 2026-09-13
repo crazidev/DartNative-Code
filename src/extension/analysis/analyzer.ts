@@ -419,7 +419,7 @@ export class LspAnalyzer extends Analyzer {
 				// Flutter Outline notifications/data are used for Flutter UI Guides and
 				// icon previews, so we still need this even though the outline itself
 				// has been removed.
-				flutterOutline: wsContext.hasAnyFlutterProjects,
+				flutterOutline: wsContext.hasAnyFlutterProjects || wsContext.hasAnyDartNativeProjects,
 				hostKind,
 				onlyAnalyzeProjectsWithOpenFiles: config.onlyAnalyzeProjectsWithOpenFiles,
 				outline: true,

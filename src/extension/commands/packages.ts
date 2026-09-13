@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 import * as vs from "vscode";
 import { DartCapabilities } from "../../shared/capabilities/dart";
@@ -19,6 +20,10 @@ import { BaseSdkCommands, commandState } from "./sdk";
 
 let isFetchingPackages = false;
 let runPubGetDelayTimer: NodeJS.Timeout | undefined;
+const failedPubFolders = new Map<string, number>();
+const lastPubExecutionEndTime = new Map<string, number>();
+const runningPubFolders = new Set<string>();
+const lastPubspecMtimeWhenRan = new Map<string, number>();
 
 /// The reason for the last pubspec save. Resets to undefined after 1s so can
 /// be used to tell if a watcher event was likely the result of an explicit in-IDE
@@ -74,19 +79,50 @@ export class PackageCommands extends BaseSdkCommands {
 	}
 
 	public async getPackagesForUri(uri: vs.Uri, operationProgress?: OperationProgress): Promise<RunProcessResult | undefined> {
+		const folder = fsPath(uri);
+		if (runningPubFolders.has(folder)) {
+			this.logger.info(`Pub get is already running for ${folder}, skipping concurrent request`);
+			return;
+		}
+		runningPubFolders.add(folder);
+
+		const pubspecPath = path.join(folder, "pubspec.yaml");
+		try {
+			if (fs.existsSync(pubspecPath)) {
+				lastPubspecMtimeWhenRan.set(folder, fs.statSync(pubspecPath).mtimeMs);
+			}
+		} catch {
+		}
+
 		const additionalArgs: string[] = [];
 		if (config.offline)
 			additionalArgs.push("--offline");
 		additionalArgs.push("--no-example");
 
-		const result = await this.runPackageCommandForUri(uri, ["get", ...additionalArgs], operationProgress);
+		try {
+			const result = await this.runPackageCommandForUri(uri, ["get", ...additionalArgs], operationProgress);
 
-		// Touch the files to update their modification times.
-		// This is a workaround for https://github.com/Dart-Code/Dart-Code/issues/5549.
-		if (result?.exitCode === 0 && this.dartCapabilities.requiresTouchAfterPubGet)
-			this.touchPubFiles(uri);
+			// Touch the files to update their modification times.
+			// This is a workaround for https://github.com/Dart-Code/Dart-Code/issues/5549.
+			if (result?.exitCode === 0) {
+				if (this.dartCapabilities.requiresTouchAfterPubGet) {
+					this.touchPubFiles(uri);
+				}
+				failedPubFolders.delete(folder);
+			} else {
+				try {
+					if (fs.existsSync(pubspecPath)) {
+						failedPubFolders.set(folder, fs.statSync(pubspecPath).mtimeMs);
+					}
+				} catch {
+				}
+			}
 
-		return result;
+			return result;
+		} finally {
+			lastPubExecutionEndTime.set(folder, Date.now());
+			runningPubFolders.delete(folder);
+		}
 	}
 
 	private async getPackagesForAllProjects() {
@@ -111,7 +147,7 @@ export class PackageCommands extends BaseSdkCommands {
 		if (typeof uri === "string")
 			uri = vs.Uri.file(uri);
 
-		if (util.isInsideFlutterProject(uri))
+		if (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))
 			return this.runFlutter(["pub", "outdated"], uri, true);
 		else
 			return this.runPub(["outdated"], uri, true);
@@ -129,7 +165,39 @@ export class PackageCommands extends BaseSdkCommands {
 	}
 
 	public async upgradePackagesForUri(uri: vs.Uri, operationProgress?: OperationProgress): Promise<RunProcessResult | undefined> {
-		return this.runPackageCommandForUri(uri, ["upgrade"], operationProgress);
+		const folder = fsPath(uri);
+		if (runningPubFolders.has(folder)) {
+			this.logger.info(`Pub upgrade is already running for ${folder}, skipping concurrent request`);
+			return;
+		}
+		runningPubFolders.add(folder);
+
+		const pubspecPath = path.join(folder, "pubspec.yaml");
+		try {
+			if (fs.existsSync(pubspecPath)) {
+				lastPubspecMtimeWhenRan.set(folder, fs.statSync(pubspecPath).mtimeMs);
+			}
+		} catch {
+		}
+
+		try {
+			const result = await this.runPackageCommandForUri(uri, ["upgrade"], operationProgress);
+			if (result?.exitCode === 0) {
+				this.touchPubFiles(uri);
+				failedPubFolders.delete(folder);
+			} else {
+				try {
+					if (fs.existsSync(pubspecPath)) {
+						failedPubFolders.set(folder, fs.statSync(pubspecPath).mtimeMs);
+					}
+				} catch {
+				}
+			}
+			return result;
+		} finally {
+			lastPubExecutionEndTime.set(folder, Date.now());
+			runningPubFolders.delete(folder);
+		}
 	}
 
 	private async runPackageCommand(
@@ -181,10 +249,10 @@ export class PackageCommands extends BaseSdkCommands {
 		if (!isValidPubGetTarget(uri).valid)
 			return;
 
-		if (util.isInsideFlutterProject(uri))
-			return this.runFlutter(["pub", ...args], uri, false, operationProgress);
+		if (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))
+			return this.runFlutter(["pub", ...args], uri, true, operationProgress);
 		else
-			return this.runPub(args, uri, false, operationProgress);
+			return this.runPub(args, uri, true, operationProgress);
 	}
 
 	private async resolvePackageTargetUri(uri: string | vs.Uri | undefined, placeHolder: string, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<vs.Uri | undefined> {
@@ -218,10 +286,10 @@ export class PackageCommands extends BaseSdkCommands {
 		}
 		if (typeof uri === "string")
 			uri = vs.Uri.file(uri);
-		if (util.isInsideFlutterProject(uri))
-			return this.runFlutter(["pub", "upgrade", "--major-versions"], uri, undefined, undefined, { onlyShowWorkspaceRoots: true });
+		if (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))
+			return this.runFlutter(["pub", "upgrade", "--major-versions"], uri, true, undefined, { onlyShowWorkspaceRoots: true });
 		else
-			return this.runPub(["upgrade", "--major-versions"], uri, undefined, undefined, { onlyShowWorkspaceRoots: true });
+			return this.runPub(["upgrade", "--major-versions"], uri, true, undefined, { onlyShowWorkspaceRoots: true });
 	}
 
 	private setupPubspecWatcher() {
@@ -246,10 +314,29 @@ export class PackageCommands extends BaseSdkCommands {
 
 		const isManualSave = !!lastPubspecSaveReason;
 		const filePath = fsPath(uri);
+		const folderPath = path.dirname(filePath);
 
 		// Never do anything for files inside hidden or build folders.
 		if (filePath.includes(`${path.sep}.`) || (!isManualSave && filePath.includes(`${path.sep}build${path.sep}`))) {
 			this.logger.info(`Skipping pubspec change for ignored folder ${filePath}`);
+			return;
+		}
+
+		// Check modification timestamp of pubspec.yaml
+		let currentMtime = 0;
+		try {
+			if (fs.existsSync(filePath))
+				currentMtime = fs.statSync(filePath).mtimeMs;
+		} catch {
+		}
+
+		const lastRanMtime = lastPubspecMtimeWhenRan.get(folderPath) ?? 0;
+		const lastEnd = lastPubExecutionEndTime.get(folderPath) ?? 0;
+
+		// If pub is currently running for this folder, or finished within the last 5s and the file
+		// hasn't been modified since that execution began, ignore the watcher event.
+		if (runningPubFolders.has(folderPath) || isFetchingPackages || (!isManualSave && Date.now() - lastEnd < 5000) || (Date.now() - lastEnd < 3000 && currentMtime <= lastRanMtime)) {
+			this.logger.info(`Skipping pubspec change for ${filePath} (running=${runningPubFolders.has(folderPath)}, fetching=${isFetchingPackages}, mtimeDiff=${currentMtime - lastRanMtime}, timeSinceEnd=${Date.now() - lastEnd})`);
 			return;
 		}
 
@@ -330,13 +417,28 @@ export class PackageCommands extends BaseSdkCommands {
 			const someProjectsRequirePubUpgrade = pubStatuses.some((result) => result.pubRequired === "UPGRADE");
 			const projectsRequiringPub = pubStatuses.map((result) => result.folderUri);
 
+			const isEligibleForAutoPubGet = (folderUri: vs.Uri) => {
+				const f = fsPath(folderUri);
+				const lastFailed = failedPubFolders.get(f);
+				if (!lastFailed)
+					return true;
+				try {
+					const pubspecPath = path.join(f, "pubspec.yaml");
+					if (fs.existsSync(pubspecPath)) {
+						return fs.statSync(pubspecPath).mtimeMs > lastFailed;
+					}
+				} catch {
+				}
+				return false;
+			};
+
 			if (options?.upgradeOnSdkChange && someProjectsRequirePubUpgrade)
 				await promptToRunPubUpgrade(projectsRequiringPub);
-			else if (!forcePrompt && projectsRequiringPub.length === 0 && uri)
+			else if (!forcePrompt && projectsRequiringPub.length === 0 && uri && isEligibleForAutoPubGet(uri))
 				await this.runPubGetWithRelatives(projectFolders, uri);
-			else if (!forcePrompt && projectsRequiringPub.length === 1)
+			else if (!forcePrompt && projectsRequiringPub.length === 1 && isEligibleForAutoPubGet(projectsRequiringPub[0]))
 				await this.runPubGetWithRelatives(projectFolders, projectsRequiringPub[0]);
-			else if (projectsRequiringPub.length)
+			else if (projectsRequiringPub.length && (forcePrompt || projectsRequiringPub.some(isEligibleForAutoPubGet)))
 				await promptToRunPubGet(projectsRequiringPub);
 		} finally {
 			isFetchingPackages = false;

@@ -20,7 +20,7 @@ import { safeToolSpawn } from "../utils/processes";
  * update/replace, causing a crash.
  */
 export async function ensureFlutterInitialized(logger: Logger, flutterScript: string): Promise<void> {
-	logger.info("Running 'flutter --help' to ensure the Flutter SDK is initialized");
+	logger.info("Running 'flutter --help' to ensure the DartNative SDK is initialized");
 	const cancellationTokenSource = new CancellationTokenSource();
 	try {
 		await withProgressIfSlow(
@@ -29,9 +29,9 @@ export async function ensureFlutterInitialized(logger: Logger, flutterScript: st
 			initializingFlutterMessage,
 			{ showAfterMs: fiveSecondsInMs },
 		);
-		logger.info(`Flutter initialized!`);
+		logger.info(`DartNative initialized!`);
 	} catch (e) {
-		logger.warn(`Flutter initialization failed, proceeding without! ${e}`);
+		logger.warn(`DartNative initialization failed, proceeding without! ${e}`);
 	} finally {
 		cancellationTokenSource.dispose();
 	}
@@ -45,7 +45,7 @@ function runFlutterHelp(logger: Logger, flutterScript: string, cancellationToken
 	const proc = safeToolSpawn(undefined, flutterScript, ["--suppress-analytics", "--help"]);
 
 	// Show the output in an output channel so if it gets stuck the user can see it.
-	const channel = channels.getOutputChannel(`flutter initialization`);
+	const channel = channels.getOutputChannel(`DartNative initializating`);
 	channels.runProcessInOutputChannel(proc, channel);
 
 	cancellationToken.onCancellationRequested(() => {
@@ -61,8 +61,8 @@ function runFlutterHelp(logger: Logger, flutterScript: string, cancellationToken
 			channel.show();
 			const ringLogContents = ringLog.toString();
 			const message = cancellationToken.isCancellationRequested
-				? `Flutter initialization was cancelled.`
-				: `Failed to initialize Flutter: Process exited with code ${code}.`;
+				? `DartNative initialization was cancelled.`
+				: `Failed to initialize DartNative: Process exited with code ${code}.`;
 			logger.error(message);
 			void window.showErrorMessage(message, showLogAction).then((chosenAction) => {
 				if (chosenAction === showLogAction)

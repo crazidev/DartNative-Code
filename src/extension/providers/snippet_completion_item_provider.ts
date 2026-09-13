@@ -3,6 +3,13 @@ import { CancellationToken, CompletionContext, CompletionItem, CompletionItemKin
 import { DartCapabilities } from "../../shared/capabilities/dart";
 import { createMarkdownString, extensionPath, readJson } from "../../shared/vscode/extension_utils";
 import { config } from "../config";
+import { isInsideFlutterProject } from "../utils";
+
+interface RawSnippet {
+	prefix?: string;
+	description?: string;
+	body?: string | string[];
+}
 
 export class SnippetCompletionItemProvider implements CompletionItemProvider {
 	private completions = new CompletionList();
@@ -10,21 +17,37 @@ export class SnippetCompletionItemProvider implements CompletionItemProvider {
 
 	constructor(private readonly dartCapabilities: DartCapabilities, filename: string, shouldRender: (uri: Uri) => boolean) {
 		this.shouldRender = shouldRender;
-		const snippets = readJson(path.join(extensionPath, filename)) as Record<string, Record<string, { prefix: string, description: string | undefined, body: string | string[] }>>;
-		for (const snippetType of Object.keys(snippets)) {
-			for (const snippetName of Object.keys(snippets[snippetType])) {
-				const snippet = snippets[snippetType][snippetName];
-				const completionItem = new CompletionItem(snippetName, CompletionItemKind.Snippet);
-				completionItem.filterText = snippet.prefix;
-				completionItem.insertText = new SnippetString(
-					Array.isArray(snippet.body)
-						? snippet.body.join("\n")
-						: snippet.body,
-				);
-				completionItem.detail = snippet.description;
-				completionItem.documentation = createMarkdownString("").appendCodeblock(completionItem.insertText.value);
-				completionItem.sortText = "zzzzzzzzzzzzzzzzzzzzzz";
-				this.completions.items.push(completionItem);
+		const snippets = readJson(path.join(extensionPath, filename)) as Record<string, RawSnippet | Record<string, RawSnippet>>;
+		const processSnippet = (snippetName: string, snippet: RawSnippet | undefined) => {
+			if (!snippet?.prefix || !snippet?.body) return;
+			const completionItem = new CompletionItem(snippet.prefix, CompletionItemKind.Snippet);
+			completionItem.filterText = snippet.prefix;
+			completionItem.insertText = new SnippetString(
+				Array.isArray(snippet.body)
+					? snippet.body.join("\n")
+					: snippet.body,
+			);
+			completionItem.detail = snippet.description ?? snippetName;
+			completionItem.documentation = createMarkdownString("").appendCodeblock(completionItem.insertText.value);
+			completionItem.sortText = "0000000000000000000000";
+			if (config.formatAfterSnippet && (snippet.prefix === "stless" || snippet.prefix === "stful" || snippet.prefix === "stanim" || snippetName.toLowerCase().includes("widget"))) {
+				completionItem.command = {
+					command: "_dart.formatDocument",
+					title: "Format Document",
+				};
+			}
+			this.completions.items.push(completionItem);
+		};
+
+		for (const key of Object.keys(snippets)) {
+			const item = snippets[key];
+			if (item?.prefix && item?.body) {
+				processSnippet(key, item);
+			} else if (item && typeof item === "object") {
+				const nested = item as Record<string, RawSnippet>;
+				for (const subKey of Object.keys(nested)) {
+					processSnippet(subKey, nested[subKey]);
+				}
 			}
 		}
 	}
@@ -35,7 +58,7 @@ export class SnippetCompletionItemProvider implements CompletionItemProvider {
 		if (!config.enableSnippets)
 			return;
 
-		if (config.enableServerSnippets)
+		if (config.enableServerSnippets && isInsideFlutterProject(document.uri))
 			return;
 
 		const line = document.lineAt(position.line).text.slice(0, position.character);

@@ -2,13 +2,13 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vs from "vscode";
 import { DartCapabilities } from "../shared/capabilities/dart";
-import { cursorInstallMcpServer, DART_CREATE_PROJECT_TRIGGER_FILE, FLUTTER_CREATE_PROJECT_TRIGGER_FILE, installFlutterExtensionPromptKey, isWin, noAction, onlyAnalyzeProjectsWithOpenFilesDeprecationUrl, onlyAnalyzeProjectsWithOpenFilesPromptKey, recommendedSettingsUrl, showRecommendedSettingsAction, useRecommendedSettingsPromptKey, userPromptContextPrefix, yesAction } from "../shared/constants";
+import { cursorInstallMcpServer, DART_CREATE_PROJECT_TRIGGER_FILE, FLUTTER_CREATE_PROJECT_TRIGGER_FILE, isWin, noAction, onlyAnalyzeProjectsWithOpenFilesDeprecationUrl, onlyAnalyzeProjectsWithOpenFilesPromptKey, recommendedSettingsUrl, showRecommendedSettingsAction, useRecommendedSettingsPromptKey, userPromptContextPrefix, yesAction } from "../shared/constants";
 import { LogCategory } from "../shared/enums";
 import { WebClient } from "../shared/fetch";
 import { Analytics, DartProjectTemplate, FlutterCreateCommandArgs, FlutterCreateTriggerData, Logger } from "../shared/interfaces";
 import { fsPath } from "../shared/utils/fs";
-import { checkHasFlutterExtension, extensionVersion, getExtensionVersionForReleaseNotes, hasFlutterExtension, isDevExtension } from "../shared/vscode/extension_utils";
-import { showFlutterSurveyNotificationIfAppropriate, showSdkDeprecationNoticeIfAppropriate } from "../shared/vscode/user_prompts";
+import { extensionVersion, getExtensionVersionForReleaseNotes, isDevExtension } from "../shared/vscode/extension_utils";
+import { showSdkDeprecationNoticeIfAppropriate } from "../shared/vscode/user_prompts";
 import { envUtils, getDartWorkspaceFolders } from "../shared/vscode/utils";
 import { Context } from "../shared/vscode/workspace";
 import { WorkspaceContext } from "../shared/workspace";
@@ -16,7 +16,7 @@ import { markProjectCreationEnded, markProjectCreationStarted } from "./commands
 import { config } from "./config";
 import { ExtensionRecommentations } from "./recommendations/recommendations";
 
-export async function showUserPrompts(logger: Logger, context: Context, webClient: WebClient, analytics: Analytics, workspaceContext: WorkspaceContext, dartCapabilities: DartCapabilities, extensionRecommendations: ExtensionRecommentations): Promise<void> {
+export async function showUserPrompts(logger: Logger, context: Context, webClient: WebClient, analytics: Analytics, workspaceContext: WorkspaceContext, dartCapabilities: DartCapabilities, _extensionRecommendations: ExtensionRecommentations): Promise<void> {
 	if (workspaceContext.config.disableStartupPrompts)
 		return;
 
@@ -35,15 +35,6 @@ export async function showUserPrompts(logger: Logger, context: Context, webClien
 
 	if (await showSdkDeprecationNoticeIfAppropriate(logger, context, workspaceContext, dartCapabilities))
 		return; // We showed it, so skip any more.
-
-	if (workspaceContext.hasAnyFlutterProjects && !hasFlutterExtension && !shouldSuppress(installFlutterExtensionPromptKey)) {
-		// It's possible that we got here when the user installed the Flutter extension, because it causes Dart to install
-		// first and activate. So, before showing this prompt we'll wait 30 seconds and then check if we still don't
-		// have the Flutter extension, and then show the prompt.
-		await new Promise((resolve) => setTimeout(resolve, 20000).unref());
-		if (!checkHasFlutterExtension())
-			return showPrompt(installFlutterExtensionPromptKey, () => extensionRecommendations.promptToInstallFlutterExtension());
-	}
 
 	// Check the user hasn't installed Flutter in a forbidden location that will cause issues.
 	if (workspaceContext.hasAnyFlutterProjects && workspaceContext.sdks.flutter) {
@@ -80,11 +71,6 @@ export async function showUserPrompts(logger: Logger, context: Context, webClien
 		return;
 	}
 
-	if (workspaceContext.hasAnyFlutterProjects) {
-		if (await showFlutterSurveyNotificationIfAppropriate(context, webClient, analytics, workspaceContext, (url) => envUtils.openInBrowser(url), Date.now(), logger))
-			return; // Bail if we showed it, so we won't show any other notifications.
-	}
-
 	if (!shouldSuppress(onlyAnalyzeProjectsWithOpenFilesPromptKey) && config.onlyAnalyzeProjectsWithOpenFiles) {
 		showPrompt(onlyAnalyzeProjectsWithOpenFilesPromptKey, promptAboutOnlyAnalyzeProjectsWithOpenFilesDeprecation);
 		return;
@@ -118,7 +104,7 @@ function hasAnyExistingDartSettings(): boolean {
 
 async function promptToUseRecommendedSettings(): Promise<boolean> {
 	const action = await vs.window.showInformationMessage(
-		"Would you like to use recommended VS Code settings for Dart & Flutter?",
+		"Would you like to use recommended VS Code settings for Dart & DartNative?",
 		yesAction,
 		noAction,
 		showRecommendedSettingsAction,

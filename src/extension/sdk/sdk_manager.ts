@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vs from "vscode";
-import { dartVMPath, flutterPath } from "../../shared/constants";
+import { dartVMPath, executableNames, flutterPath } from "../../shared/constants";
 import { Logger, Sdks } from "../../shared/interfaces";
 import { versionIsAtLeast } from "../../shared/utils";
 import { existsAndIsFileSync, getChildFolders, getSdkVersion, homeRelativePath, safeRealpathSync } from "../../shared/utils/fs";
@@ -18,6 +18,10 @@ abstract class SdkManager {
 	protected abstract getLabel(version: string): string;
 	protected abstract clearWorkspaceSdk(): void;
 	protected abstract setSdk(folder: string | undefined, target: vs.ConfigurationTarget): void;
+	/** Returns true if the given folder looks like a valid SDK for this manager. Override for multi-binary support. */
+	protected isSdkFolder(folder: string): boolean {
+		return existsAndIsFileSync(path.join(folder, this.executablePath));
+	}
 
 	public changeSdk() {
 		if (this.sdkPaths?.length)
@@ -39,7 +43,7 @@ abstract class SdkManager {
 			allPaths.push(this.currentSdk);
 
 		const sdkFolders = allPaths
-			.filter((f) => existsAndIsFileSync(path.join(f, this.executablePath))); // Only those that look like SDKs.
+			.filter((f) => this.isSdkFolder(f)); // Only those that look like SDKs.
 
 		const sdkItems: SdkPickItem[] = sdkFolders.map((f) => {
 			// Resolve symlinks so we look in correct folder for version file.
@@ -105,20 +109,27 @@ export class DartSdkManager extends SdkManager {
 }
 
 export class FlutterSdkManager extends SdkManager {
-	protected get sdkPaths(): string[] { return config.flutterSdkPaths; }
+	// Uses dartNativeSdkPaths so the quick-pick works for DartNative SDK switching.
+	protected get sdkPaths(): string[] { return config.dartNativeSdkPaths; }
 	protected get currentSdk(): string | undefined { return this.sdks.flutter; }
-	protected get configuredSdk(): string | undefined { return config.flutterSdkPath; }
-	protected get configName(): string { return "dart.flutterSdkPaths"; }
+	protected get configuredSdk(): string | undefined { return config.dartNativeSdkPath; }
+	protected get configName(): string { return "dartx.dartNativeSdkPaths"; }
+	// Used as a fallback executable to determine SDK folders; dn is preferred.
 	protected get executablePath() { return flutterPath; }
+	protected isSdkFolder(folder: string): boolean {
+		// Accept either bin/dn or bin/flutter as evidence of a DartNative SDK.
+		return existsAndIsFileSync(path.join(folder, "bin", executableNames.dn))
+			|| existsAndIsFileSync(path.join(folder, flutterPath));
+	}
 	protected getLabel(version: string) {
-		return `Flutter SDK ${version}`;
+		return `DartNative SDK ${version}`;
 	}
 	protected clearWorkspaceSdk() {
 		if (config.workspaceFlutterSdkPath)
-			void config.setFlutterSdkPath(undefined, vs.ConfigurationTarget.Workspace);
+			void config.setDartNativeSdkPath(undefined, vs.ConfigurationTarget.Workspace);
 	}
 	protected setSdk(folder: string | undefined, target: vs.ConfigurationTarget) {
-		void config.setFlutterSdkPath(folder, target);
+		void config.setDartNativeSdkPath(folder, target);
 	}
 }
 
