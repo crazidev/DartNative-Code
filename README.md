@@ -6,6 +6,10 @@
 
 ## Introduction
 
+<p align="start">
+  <img src="media/dartnative.png" alt="DartNative" width="128" />
+</p>
+
 DartNative extends [DartCode](https://dartcode.org/) extension and provides tools for
 effectively editing, refactoring, running, and reloading [DartNative](https://dartnative.com/)
 mobile apps.
