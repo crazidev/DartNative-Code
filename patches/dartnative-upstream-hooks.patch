@@ -418,10 +418,10 @@ index bc8d6577..e0f4dde2 100644
  
  	public dispose(): void {
 diff --git a/src/extension/commands/add_dependency.ts b/src/extension/commands/add_dependency.ts
-index a5aa503b..13d8848b 100644
+index a5aa503b..ea5280f3 100644
 --- a/src/extension/commands/add_dependency.ts
 +++ b/src/extension/commands/add_dependency.ts
-@@ -193,7 +193,7 @@ export class AddDependencyCommand extends BaseSdkCommands {
+@@ -193,12 +193,12 @@ export class AddDependencyCommand extends BaseSdkCommands {
  		}
  
  		for (const uri of uris) {
@@ -429,16 +429,28 @@ index a5aa503b..13d8848b 100644
 +			const useFlutter = this.sdks.flutter && (forceFlutter || util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri));
  			for (const commandArgs of commandsArgs) {
  				if (useFlutter) {
- 					await this.runFlutter(["pub", ...commandArgs], uri);
-@@ -217,7 +217,7 @@ export class AddDependencyCommand extends BaseSdkCommands {
+-					await this.runFlutter(["pub", ...commandArgs], uri);
++					await this.runFlutter(["pub", ...commandArgs], uri, true);
+ 				} else {
+-					await this.runPub(commandArgs, uri);
++					await this.runPub(commandArgs, uri, true);
+ 				}
+ 			}
+ 		}
+@@ -217,10 +217,10 @@ export class AddDependencyCommand extends BaseSdkCommands {
  
  		const args = ["remove", packageName];
  
 -		if (this.sdks.flutter && util.isInsideFlutterProject(uri)) {
+-			return this.runFlutter(["pub", ...args], uri);
 +		if (this.sdks.flutter && (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))) {
- 			return this.runFlutter(["pub", ...args], uri);
++			return this.runFlutter(["pub", ...args], uri, true);
  		} else {
- 			return this.runPub(args, uri);
+-			return this.runPub(args, uri);
++			return this.runPub(args, uri, true);
+ 		}
+ 	}
+ 
 diff --git a/src/extension/commands/debug.ts b/src/extension/commands/debug.ts
 index 9752e2c3..a6df3eaf 100644
 --- a/src/extension/commands/debug.ts
@@ -572,7 +584,7 @@ index 9752e2c3..a6df3eaf 100644
  				}
  				progress.complete();
 diff --git a/src/extension/commands/packages.ts b/src/extension/commands/packages.ts
-index d1940504..ea8b43e5 100644
+index d1940504..93ddc011 100644
 --- a/src/extension/commands/packages.ts
 +++ b/src/extension/commands/packages.ts
 @@ -1,3 +1,4 @@
@@ -699,24 +711,34 @@ index d1940504..ea8b43e5 100644
  	}
  
  	private async runPackageCommand(
-@@ -181,7 +249,7 @@ export class PackageCommands extends BaseSdkCommands {
+@@ -181,10 +249,10 @@ export class PackageCommands extends BaseSdkCommands {
  		if (!isValidPubGetTarget(uri).valid)
  			return;
  
 -		if (util.isInsideFlutterProject(uri))
+-			return this.runFlutter(["pub", ...args], uri, false, operationProgress);
 +		if (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))
- 			return this.runFlutter(["pub", ...args], uri, false, operationProgress);
++			return this.runFlutter(["pub", ...args], uri, true, operationProgress);
  		else
- 			return this.runPub(args, uri, false, operationProgress);
-@@ -218,7 +286,7 @@ export class PackageCommands extends BaseSdkCommands {
+-			return this.runPub(args, uri, false, operationProgress);
++			return this.runPub(args, uri, true, operationProgress);
+ 	}
+ 
+ 	private async resolvePackageTargetUri(uri: string | vs.Uri | undefined, placeHolder: string, { onlyShowWorkspaceRoots = false }: { onlyShowWorkspaceRoots?: boolean; } = {}): Promise<vs.Uri | undefined> {
+@@ -218,10 +286,10 @@ export class PackageCommands extends BaseSdkCommands {
  		}
  		if (typeof uri === "string")
  			uri = vs.Uri.file(uri);
 -		if (util.isInsideFlutterProject(uri))
+-			return this.runFlutter(["pub", "upgrade", "--major-versions"], uri, undefined, undefined, { onlyShowWorkspaceRoots: true });
 +		if (util.isInsideFlutterProject(uri) || util.isInsideDartNativeProject(uri))
- 			return this.runFlutter(["pub", "upgrade", "--major-versions"], uri, undefined, undefined, { onlyShowWorkspaceRoots: true });
++			return this.runFlutter(["pub", "upgrade", "--major-versions"], uri, true, undefined, { onlyShowWorkspaceRoots: true });
  		else
- 			return this.runPub(["upgrade", "--major-versions"], uri, undefined, undefined, { onlyShowWorkspaceRoots: true });
+-			return this.runPub(["upgrade", "--major-versions"], uri, undefined, undefined, { onlyShowWorkspaceRoots: true });
++			return this.runPub(["upgrade", "--major-versions"], uri, true, undefined, { onlyShowWorkspaceRoots: true });
+ 	}
+ 
+ 	private setupPubspecWatcher() {
 @@ -246,6 +314,7 @@ export class PackageCommands extends BaseSdkCommands {
  
  		const isManualSave = !!lastPubspecSaveReason;
@@ -783,7 +805,7 @@ index d1940504..ea8b43e5 100644
  		} finally {
  			isFetchingPackages = false;
 diff --git a/src/extension/commands/sdk.ts b/src/extension/commands/sdk.ts
-index 8e18b39b..7d2d73f7 100644
+index 8e18b39b..15596735 100644
 --- a/src/extension/commands/sdk.ts
 +++ b/src/extension/commands/sdk.ts
 @@ -2,12 +2,14 @@ import * as fs from "fs";
@@ -889,7 +911,18 @@ index 8e18b39b..7d2d73f7 100644
  
  		const pubExecution = getPubExecutionInfo(this.sdks.dart, args);
  
-@@ -166,10 +212,10 @@ export class SdkCommands extends BaseSdkCommands {
+@@ -138,6 +184,10 @@ export class BaseSdkCommands implements IAmDisposable {
+ 						channel.show(true);
+ 				});
+ 
++				if (alwaysShowOutput) {
++					proc.on("close", () => channel.show());
++				}
++
+ 				return proc;
+ 			}, existingProcess);
+ 			this.runningCommands[commandId] = process;
+@@ -166,10 +216,10 @@ export class SdkCommands extends BaseSdkCommands {
  		super(logger, context, workspace, dartCapabilities);
  		const dartSdkManager = new DartSdkManager(this.logger, this.workspace.sdks);
  		this.disposables.push(vs.commands.registerCommand("dart.changeSdk", () => dartSdkManager.changeSdk()));
