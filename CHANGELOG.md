@@ -20,6 +20,10 @@ All notable changes to the "dartnative" extension will be documented in this fil
   - Automatic reveal and post-execution focus of the output channel for all package operations (`pub get`, `add dependency`, `pub upgrade`).
   - Rebranded SDK initialization channel to `DartNative initializating`.
   - Cleaned up output channel list by removing background daemon channels.
+- **DartNative Clean Project & Clean All Projects**:
+  - Updated notification progress titles to display `DartNative: Clean Project` and `DartNative: Clean All Projects` when running clean operations on DartNative projects.
+  - Updated folder and project selection prompt to display `Select the folder to run "DartNative clean" in` (instead of "flutter clean").
+  - Updated project folder filters to discover DartNative projects alongside Flutter projects in clean commands and workspace project search.
 - **DartNative SDK Locator & Auto-Validation**:
   - Interactive SDK folder picker (`dart.locateDartNativeSdk`) with automatic detection and validation of `bin/dn` (`dn.bat` on Windows).
   - Automatically resolves parent SDK folder when user selects the `bin` folder directly.

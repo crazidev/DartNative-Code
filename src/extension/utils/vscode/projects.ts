@@ -3,7 +3,7 @@ import * as vs from "vscode";
 import { Uri } from "vscode";
 import { Logger } from "../../../shared/interfaces";
 import { notUndefined } from "../../../shared/utils";
-import { fsPath, homeRelativePath, isFlutterProjectFolder } from "../../../shared/utils/fs";
+import { fsPath, homeRelativePath, isDartNativeProjectFolder, isFlutterProjectFolder } from "../../../shared/utils/fs";
 import { getActiveRealFileEditor } from "../../../shared/vscode/editors";
 import { locateBestProjectRoot } from "../../../shared/vscode/project";
 import type { PubWorkspaceOrPackageFolderInfo } from "../../../shared/vscode/pub";
@@ -39,10 +39,11 @@ export async function getFolderToRunCommandIn(
 
 	// Otherwise look for what projects we have.
 	const selectableFolders = (await getAllProjectFolders(logger, getExcludedFolders, { requirePubspec: true, sort: true, searchDepth: config.projectSearchDepth }))
-		.filter(flutterOnly ? isFlutterProjectFolder : () => true);
+		.filter(flutterOnly ? (f) => isFlutterProjectFolder(f) || isDartNativeProjectFolder(f) : () => true);
 
 	if (!selectableFolders?.length) {
-		const projectTypes = flutterOnly ? "Flutter" : "Dart/Flutter";
+		const isDartNative = (vs.workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)));
+		const projectTypes = flutterOnly ? (isDartNative ? "DartNative" : "DartNative/Flutter") : "Dart/DartNative/Flutter";
 		void vs.window.showWarningMessage(`No ${projectTypes} project roots were found. Do you have a pubspec.yaml file?`);
 		return undefined;
 	}

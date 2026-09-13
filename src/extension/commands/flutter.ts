@@ -51,16 +51,41 @@ export class FlutterCommands extends BaseSdkCommands {
 		this.disposables.push(vs.commands.registerCommand("_flutter.clean", this.flutterClean.bind(this)));
 	}
 
+	private isDartNativeClean(uri?: vs.Uri | vs.Uri[]): boolean {
+		if (uri) {
+			if (Array.isArray(uri)) {
+				if (uri.length > 0)
+					return uri.some((u) => isDartNativeProjectFolder(fsPath(u)) || util.isInsideDartNativeProject(u));
+			} else {
+				return isDartNativeProjectFolder(fsPath(uri)) || util.isInsideDartNativeProject(uri);
+			}
+		}
+		if (this.workspace.hasAnyDartNativeProjects)
+			return true;
+		if (this.workspace.firstFlutterProject && isDartNativeProjectFolder(this.workspace.firstFlutterProject))
+			return true;
+		const activeUri = vs.window.activeTextEditor?.document.uri;
+		if (activeUri?.scheme === "file" && (isDartNativeProjectFolder(fsPath(activeUri)) || util.isInsideDartNativeProject(activeUri)))
+			return true;
+		return (vs.workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)));
+	}
+
 	private async flutterClean(
 		uri: vs.Uri | vs.Uri[] | undefined,
 		operationProgress?: OperationProgress,
 	): Promise<RunProcessResult | undefined> {
+		const isDartNative = this.isDartNativeClean(uri);
+		const isBatch = Array.isArray(uri);
+
 		// If we don't have a parent progress, add one.
 		if (!operationProgress) {
+			const title = isDartNative
+				? (isBatch ? "DartNative: Clean All Projects" : "DartNative: Clean Project")
+				: (isBatch ? "flutter clean (all projects)" : "flutter clean");
 			return vs.window.withProgress({
 				cancellable: true,
 				location: vs.ProgressLocation.Notification,
-				title: "flutter clean",
+				title,
 			}, (progress, token) => this.flutterClean(uri, { progressReporter: progress, cancellationToken: token }));
 		}
 
@@ -71,7 +96,10 @@ export class FlutterCommands extends BaseSdkCommands {
 		}
 
 		if (!uri) {
-			const path = await getFolderToRunCommandIn(this.logger, `Select the folder to run "flutter clean" in`, { selection: uri, flutterOnly: true });
+			const prompt = isDartNative
+				? `Select the folder to run "DartNative clean" in`
+				: `Select the folder to run "flutter clean" in`;
+			const path = await getFolderToRunCommandIn(this.logger, prompt, { selection: uri, flutterOnly: true });
 			if (!path)
 				return;
 			uri = vs.Uri.file(path);
@@ -86,8 +114,15 @@ export class FlutterCommands extends BaseSdkCommands {
 
 	private async flutterCleanAllProjects(): Promise<void> {
 		const allFolders = await getAllProjectFolders(this.logger, util.getExcludedFolders, { requirePubspec: true, sort: true, searchDepth: config.projectSearchDepth });
-		const flutterFolders = allFolders.filter(isFlutterProjectFolder);
-		const folderUris = flutterFolders.map((f) => vs.Uri.file(f));
+		const isDartNativeWorkspace = this.workspace.hasAnyDartNativeProjects
+			|| (vs.workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)));
+		const cleanFolders = allFolders.filter((f) => isFlutterProjectFolder(f) || isDartNativeProjectFolder(f));
+		if (!cleanFolders.length) {
+			const projectType = isDartNativeWorkspace ? (this.workspace.hasAnyFlutterProjects ? "Flutter or DartNative" : "DartNative") : "Flutter";
+			void vs.window.showWarningMessage(`No ${projectType} projects were found.`);
+			return;
+		}
+		const folderUris = cleanFolders.map((f) => vs.Uri.file(f));
 		await vs.commands.executeCommand("flutter.clean", folderUris);
 	}
 
