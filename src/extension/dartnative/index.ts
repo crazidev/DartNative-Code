@@ -8,3 +8,4 @@ export { isDartNativeProjectFolder, projectReferencesDartNative, pubspecContentR
 export { findDartNativeSdk, resolveDnExecutable, isDartNativeDebugSession, isPathInsideDartNativeProject } from "./sdk";
 export { patchProgressForDartNative, isDevToolsPageSupportedForDartNative } from "./debug_hooks";
 export { isUriInsideDartNativeProject, resolveBinaryForFolder, getArgsForFolder, toolNameForFolder, buildDartNativeCliArgs } from "./cli_runner";
+export { validateDartNativeSdkFolder, pickDartNativeSdkFolder, promptToLocateDartNativeSdk, setDartNativeLicenseKeyCommand } from "./sdk_locator";

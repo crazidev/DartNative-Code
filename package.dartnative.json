@@ -1,7 +1,7 @@
 {
 	"_comment": "DartNative manifest overlay — applied by scripts/patch-manifest.ts at build time.",
 	"displayName": "DartNative",
-	"name": "dartnative",
+	"name": "dartx",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
 	"keywords": [
 		"dart",
@@ -274,9 +274,35 @@
 				"default": true,
 				"markdownDescription": "When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers.",
 				"scope": "resource"
+			},
+			"dart.dartNativeLicenseKey": {
+				"type": [
+					"null",
+					"string"
+				],
+				"default": null,
+				"markdownDescription": "The DartNative license key. When configured, this is passed to DartNative CLI commands (`dn run`, `dn pub get`, `dn test`, etc.) as `--dart-define=DN_LICENSE_KEY=<key>`.",
+				"scope": "window"
 			}
 		}
 	},
+	"additionalCommands": [
+		{
+			"command": "dart.locateDartNativeSdk",
+			"title": "Locate SDK",
+			"category": "DartNative"
+		},
+		{
+			"command": "dart.setDartNativeLicenseKey",
+			"title": "Set License Key",
+			"category": "DartNative"
+		},
+		{
+			"command": "dartnative.addSdkToPath",
+			"title": "Add SDK to PATH",
+			"category": "DartNative"
+		}
+	],
 	"settingPrefixRename": {
 		"fromPrefix": "dart.",
 		"toPrefix": "dartx."

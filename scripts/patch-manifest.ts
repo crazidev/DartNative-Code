@@ -64,6 +64,20 @@ function main() {
 		}
 	}
 
+	// 2.5 Add additional commands if defined in overlay.
+	if (Array.isArray(overlay.additionalCommands)) {
+		pkg.contributes = pkg.contributes || {};
+		pkg.contributes.commands = pkg.contributes.commands || [];
+		const existingCommands = new Set(pkg.contributes.commands.map((c: any) => c.command));
+		for (const cmd of overlay.additionalCommands) {
+			if (!existingCommands.has(cmd.command)) {
+				console.log(`  → adding command: ${cmd.command} ("${cmd.title}")`);
+				pkg.contributes.commands.push(cmd);
+				existingCommands.add(cmd.command);
+			}
+		}
+	}
+
 	// 3. Disable incompatible commands across all menus.
 	const disabledCommands: Set<string> = new Set(overlay.disabledCommands || []);
 	const menus: Record<string, any[]> = pkg.contributes?.menus || {};
@@ -339,14 +353,15 @@ function main() {
 		}
 
 		// Update internal setting references in descriptions: #dart.foo# -> #dartx.foo#
+		const escapedFromPrefix = fromPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 		for (const config of configs) {
 			if (config.properties) {
 				for (const val of Object.values<any>(config.properties)) {
 					if (typeof val.description === "string") {
-						val.description = val.description.replace(new RegExp(`#${fromPrefix}`, "g"), `#${toPrefix}`);
+						val.description = val.description.replace(new RegExp(`#${escapedFromPrefix}`, "g"), `#${toPrefix}`);
 					}
 					if (typeof val.markdownDescription === "string") {
-						val.markdownDescription = val.markdownDescription.replace(new RegExp(`#${fromPrefix}`, "g"), `#${toPrefix}`);
+						val.markdownDescription = val.markdownDescription.replace(new RegExp(`#${escapedFromPrefix}`, "g"), `#${toPrefix}`);
 					}
 				}
 			}
@@ -358,7 +373,7 @@ function main() {
 			if (Array.isArray(menuItems)) {
 				for (const entry of menuItems) {
 					if (typeof entry.when === "string" && entry.when.includes(`config.${fromPrefix}`)) {
-						entry.when = entry.when.replace(new RegExp(`config\\.${fromPrefix}`, "g"), `config.${toPrefix}`);
+						entry.when = entry.when.replace(new RegExp(`config\\.${escapedFromPrefix}`, "g"), `config.${toPrefix}`);
 					}
 				}
 			}

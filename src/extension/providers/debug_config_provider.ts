@@ -692,6 +692,11 @@ export class DebugConfigProvider implements DebugConfigurationProvider {
 				break;
 		}
 
+		const licenseKey = config.dartNativeLicenseKey?.trim();
+		if (licenseKey && !args.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
+			args.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
+		}
+
 		return args;
 	}
 

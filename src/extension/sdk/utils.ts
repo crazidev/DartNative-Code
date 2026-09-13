@@ -5,7 +5,7 @@ import { commands, ExtensionContext, extensions, ProgressLocation, Uri, window, 
 import { analyzerSnapshotPath, cloningFlutterMessage, DART_DOWNLOAD_URL, dartPlatformName, dartVMPath, executableNames, ExtensionRestartReason, FLUTTER_CREATE_PROJECT_TRIGGER_FILE, FLUTTER_DOWNLOAD_URL, flutterPath, isLinux, MISSING_VERSION_FILE_VERSION, openSettingsAction, SdkTypeString, showLogAction } from "../../shared/constants";
 import { GetSDKCommandConfig, GetSDKCommandResult, Logger, SdkSearchResult, SdkSearchResults, WorkspaceConfig, WritableWorkspaceConfig } from "../../shared/interfaces";
 import { flatMap, isDartSdkFromFlutter, notUndefined } from "../../shared/utils";
-import { existsAndIsDirectorySync, existsAndIsFileSync, extractFlutterSdkPathFromPackagesFile, fsPath, getSdkVersion, hasPubspec, projectReferencesFlutter, safeRealpathSync } from "../../shared/utils/fs";
+import { existsAndIsDirectorySync, existsAndIsFileSync, extractFlutterSdkPathFromPackagesFile, fsPath, getSdkVersion, hasPubspec, isDartNativeProjectFolder, projectReferencesFlutter, safeRealpathSync } from "../../shared/utils/fs";
 import { resolvedPromise } from "../../shared/utils/promises";
 import { processBazelWorkspace, processDartSdkRepository, processFuchsiaWorkspace } from "../../shared/utils/workspace";
 import { envUtils, getAllProjectFolders, getDartWorkspaceFolders, resolvePaths } from "../../shared/vscode/utils";
@@ -13,6 +13,7 @@ import { WorkspaceContext } from "../../shared/workspace";
 import { Analytics, CloneSdkResult } from "../analytics";
 import { AddSdkToPath } from "../commands/add_sdk_to_path";
 import { config } from "../config";
+import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
 import { ringLog } from "../extension";
 import { getExcludedFolders, openLogContents, promptToReloadExtension } from "../utils";
 import { runToolProcess } from "../utils/processes";
@@ -63,7 +64,12 @@ export class SdkUtils {
 
 	private hasShownActivationFailure = false;
 	private showRelevantActivationFailureMessage(workspaceContext: WorkspaceContext, isFlutter: boolean, commandToReRun?: string) {
-		if (isFlutter && workspaceContext.sdks.flutter && !workspaceContext.sdks.dart) {
+		const isDartNative = (workspace.workspaceFolders || []).some((f) => isDartNativeProjectFolder(fsPath(f.uri)))
+			|| !!config.dartNativeSdkPath;
+
+		if (isDartNative) {
+			void promptToLocateDartNativeSdk(this.logger, "Could not find the DartNative SDK. Please ensure 'dn' is on your PATH or configure the SDK folder.", commandToReRun);
+		} else if (isFlutter && workspaceContext.sdks.flutter && !workspaceContext.sdks.dart) {
 			this.showFluttersDartSdkActivationFailure();
 		} else if (isFlutter) {
 			this.showFlutterActivationFailure(commandToReRun);

@@ -123,5 +123,41 @@ dependencies:
 `;
 			assert.equal(pubspecContentReferencesDartNative(normalPubspec), false);
 		});
+
+		it("appends --dart-define=DN_LICENSE_KEY=<key> when licenseKey is provided", () => {
+			const result = buildDartNativeCliArgs({
+				folder: tempDnDir,
+				executionArgs: ["run", "-d", "macos"],
+				globalAdditionalArgs: [],
+				runAdditionalArgs: [],
+				testAdditionalArgs: [],
+				licenseKey: "my_secret_key_123",
+			});
+
+			assert.equal(result.isDartNative, true);
+			assert.ok(result.args.includes("--dart-define=DN_LICENSE_KEY=my_secret_key_123"));
+			assert.deepEqual(result.args, [
+				"run",
+				"-d",
+				"macos",
+				"--dart-define=DN_LICENSE_KEY=my_secret_key_123",
+			]);
+		});
+
+		it("does not duplicate --dart-define=DN_LICENSE_KEY if already in args", () => {
+			const result = buildDartNativeCliArgs({
+				folder: tempDnDir,
+				executionArgs: ["run", "--dart-define=DN_LICENSE_KEY=existing_key"],
+				globalAdditionalArgs: [],
+				runAdditionalArgs: [],
+				testAdditionalArgs: [],
+				licenseKey: "new_key",
+			});
+
+			assert.equal(result.isDartNative, true);
+			const count = result.args.filter((a) => a.startsWith("--dart-define=DN_LICENSE_KEY=")).length;
+			assert.equal(count, 1);
+			assert.equal(result.args.includes("--dart-define=DN_LICENSE_KEY=existing_key"), true);
+		});
 	});
 });

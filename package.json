@@ -1,5 +1,5 @@
 {
-	"name": "dartnative",
+	"name": "dartx",
 	"displayName": "DartNative",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
 	"version": "3.144.0-dev",
@@ -736,6 +736,21 @@
 			{
 				"command": "_dart.settings.openFlutterTestAdditionalArgs",
 				"title": "Edit additional 'flutter test' arguments",
+				"category": "DartNative"
+			},
+			{
+				"command": "dart.locateDartNativeSdk",
+				"title": "Locate SDK",
+				"category": "DartNative"
+			},
+			{
+				"command": "dart.setDartNativeLicenseKey",
+				"title": "Set License Key",
+				"category": "DartNative"
+			},
+			{
+				"command": "dartnative.addSdkToPath",
+				"title": "Add SDK to PATH",
 				"category": "DartNative"
 			}
 		],
@@ -2432,6 +2447,15 @@
 							"type": "string"
 						},
 						"description": "Additional args to pass to the `dartnative test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects."
+					},
+					"dartx.dartNativeLicenseKey": {
+						"type": [
+							"null",
+							"string"
+						],
+						"default": null,
+						"markdownDescription": "The DartNative license key. When configured, this is passed to DartNative CLI commands (`dn run`, `dn pub get`, `dn test`, etc.) as `--dart-define=DN_LICENSE_KEY=<key>`.",
+						"scope": "window"
 					}
 				}
 			},

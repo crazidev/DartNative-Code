@@ -2,7 +2,7 @@ import * as fs from "fs";
 import { DevToolsPage } from "./interfaces";
 import { versionIsAtLeast } from "./utils";
 
-export type SdkTypeString = "Dart" | "Flutter";
+export type SdkTypeString = "Dart" | "Flutter" | "DartNative";
 
 export const dartCodeExtensionIdentifier = "Dart-Code.dartx";
 export const flutterExtensionIdentifier = "Dart-Code.flutter";

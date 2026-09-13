@@ -100,6 +100,7 @@ import { FlutterPostMessageSidebar } from "./views/devtools/legacy_post_message_
 import { PropertyEditor } from "./views/devtools/property_editor";
 import { FlutterDtdSidebar } from "./views/devtools/sidebar";
 import { DartPackagesProvider } from "./views/packages_view";
+import { pickDartNativeSdkFolder, setDartNativeLicenseKeyCommand } from "./dartnative/sdk_locator";
 
 let maybeAnalyzer: LspAnalyzer | undefined;
 let flutterDaemon: IFlutterDaemon | undefined;
@@ -235,8 +236,20 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 		const baseSdk = workspaceContext.hasAnyFlutterProjects
 			? sdks.flutter
 			: sdks.dart;
-		const envPathPrefix = [baseSdk, "bin", path.delimiter].join(path.sep);
-		context.environmentVariableCollection.prepend("PATH", envPathPrefix);
+		if (baseSdk) {
+			const binDir = path.normalize(path.join(baseSdk, "bin"));
+			const normalizedBinDir = binDir.replace(/[\\/]+$/, "");
+			const existingPaths = (process.env.PATH || "")
+				.split(path.delimiter)
+				.map((p) => path.normalize(p.trim()).replace(/[\\/]+$/, ""));
+			if (!existingPaths.includes(normalizedBinDir)) {
+				const envPathPrefix = `${normalizedBinDir}${path.delimiter}`;
+				context.environmentVariableCollection.prepend("PATH", envPathPrefix);
+			} else {
+				// Already present in process.env.PATH (e.g. from .zshrc); remove mutator to prevent duplicate paths.
+				context.environmentVariableCollection.delete("PATH");
+			}
+		}
 	} else {
 		// Since the value persists (which we want, so upon reload we don't miss
 		// any terminals that were already restored before we activated), we need
@@ -352,6 +365,8 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	context.subscriptions.push(flutterCommands);
 	context.subscriptions.push(packageCommands);
 	context.subscriptions.push(addDependencyCommand);
+	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
+	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, sdks)));
 
 	// Handle new projects before creating the analyer to avoid a few issues with
 	// showing errors while packages are fetched, plus issues like

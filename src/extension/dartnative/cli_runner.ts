@@ -27,8 +27,12 @@ export function resolveBinaryForFolder(sdkFlutterPath: string, folder: string): 
 	const dnBinaryPath = path.join(sdkFlutterPath, "bin", executableNames.dn);
 	const flutterBinaryPath = path.join(sdkFlutterPath, flutterPath);
 
-	if (isDartNative && fs.existsSync(dnBinaryPath))
-		return dnBinaryPath;
+	if (isDartNative) {
+		if (fs.existsSync(dnBinaryPath))
+			return dnBinaryPath;
+		// Strictly for dn: do not fall back to flutter for DartNative projects.
+		throw new Error(`DartNative binary ('dn') not found in SDK: ${sdkFlutterPath}`);
+	}
 
 	return flutterBinaryPath;
 }
@@ -56,6 +60,8 @@ export function toolNameForFolder(folder: string): string {
  * the subcommand itself so that `dn` receives arguments in the expected order:
  *   dn [globalArgs] <subcommand> [subcommandArgs] [executionArgs...]
  *
+ * Appends `--dart-define=DN_LICENSE_KEY=<key>` when a license key is configured.
+ *
  * For non-DartNative folders, returns the execution args unchanged and
  * expects the caller to prepend Flutter global args separately.
  */
@@ -66,8 +72,9 @@ export function buildDartNativeCliArgs(options: {
 	runAdditionalArgs: string[];
 	testAdditionalArgs: string[];
 	pubAdditionalArgs?: string[];
+	licenseKey?: string;
 }): { isDartNative: boolean; args: string[] } {
-	const { folder, executionArgs, globalAdditionalArgs, runAdditionalArgs, testAdditionalArgs, pubAdditionalArgs = [] } = options;
+	const { folder, executionArgs, globalAdditionalArgs, runAdditionalArgs, testAdditionalArgs, pubAdditionalArgs = [], licenseKey } = options;
 	const dartNative = isDartNativeProjectFolder(folder);
 	if (!dartNative)
 		return { isDartNative: false, args: executionArgs };
@@ -92,6 +99,12 @@ export function buildDartNativeCliArgs(options: {
 	result.push(...dedupe(subcommandArgs, result));
 	result.push(...executionArgs);
 	result.push(...dedupe(pubArgs, result));
+
+	// If license key is provided and not already defined, append --dart-define=DN_LICENSE_KEY=<key>.
+	const key = licenseKey?.trim();
+	if (key && !result.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
+		result.push(`--dart-define=DN_LICENSE_KEY=${key}`);
+	}
 
 	return { isDartNative: true, args: result };
 }

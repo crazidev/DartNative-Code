@@ -159,6 +159,14 @@ export class AddSdkToPathCommands extends AddSdkToPath implements IAmDisposable 
 
 	constructor(logger: Logger, context: vs.ExtensionContext, wsContext: WorkspaceContext, analytics: Analytics) {
 		super(logger, context, analytics);
+		const isDartNative = () => {
+			const flutterSdk = wsContext.sdks.flutter;
+			return !!(flutterSdk && (
+				fs.existsSync(path.join(flutterSdk, "bin", "dn"))
+				|| fs.existsSync(path.join(flutterSdk, "bin", "dn.bat"))
+			));
+		};
+
 		this.disposables.push(vs.commands.registerCommand("dart.addSdkToPath", async () => {
 			if (wsContext.sdks.dartSdkIsFromFlutter) {
 				return vs.commands.executeCommand("flutter.addSdkToPath");
@@ -166,7 +174,11 @@ export class AddSdkToPathCommands extends AddSdkToPath implements IAmDisposable 
 			await this.addToPath("Dart", wsContext.sdks.dart);
 		}));
 		this.disposables.push(vs.commands.registerCommand("flutter.addSdkToPath", async () => {
-			await this.addToPath("Flutter", wsContext.sdks.flutter);
+			const sdkType: SdkTypeString = isDartNative() ? "DartNative" : "Flutter";
+			await this.addToPath(sdkType, wsContext.sdks.flutter);
+		}));
+		this.disposables.push(vs.commands.registerCommand("dartnative.addSdkToPath", async () => {
+			await this.addToPath("DartNative", wsContext.sdks.flutter);
 		}));
 	}
 

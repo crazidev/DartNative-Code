@@ -14,6 +14,7 @@ import { getPackageOrFolderDisplayName } from "../../shared/vscode/display_names
 import { OperationProgress } from "../../shared/vscode/interfaces";
 import { Context } from "../../shared/vscode/workspace";
 import { config } from "../config";
+import { promptToLocateDartNativeSdk } from "../dartnative/sdk_locator";
 import { DartSdkManager, FlutterSdkManager } from "../sdk/sdk_manager";
 import * as util from "../utils";
 import { getGlobalFlutterArgs, safeToolSpawn } from "../utils/processes";
@@ -64,15 +65,20 @@ export class BaseSdkCommands implements IAmDisposable {
 	}
 
 	public runFlutterInFolder(folder: string, args: string[], packageOrFolderDisplayName: string | undefined, alwaysShowOutput = false, operationProgress?: OperationProgress, customScript?: CustomScript): Promise<RunProcessResult | undefined> {
-		if (!this.sdks.flutter)
-			throw new Error("Flutter SDK not available");
-
 		const isDartNative = isDartNativeProjectFolder(folder);
-		const dnBinaryPath = path.join(this.sdks.flutter, "bin", executableNames.dn);
-		const flutterBinaryPath = path.join(this.sdks.flutter, flutterPath);
-		const defaultExec = isDartNative && fs.existsSync(dnBinaryPath)
-			? dnBinaryPath
-			: flutterBinaryPath;
+		const dnBinaryPath = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
+		const flutterBinaryPath = this.sdks.flutter ? path.join(this.sdks.flutter, flutterPath) : undefined;
+
+		if (isDartNative) {
+			if (!dnBinaryPath || !fs.existsSync(dnBinaryPath)) {
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Please locate your DartNative SDK.");
+				throw new Error("DartNative binary ('dn') not found.");
+			}
+		} else if (!this.sdks.flutter) {
+			throw new Error("Flutter SDK not available");
+		}
+
+		const defaultExec = isDartNative ? dnBinaryPath! : flutterBinaryPath!;
 
 		const execution = usingCustomScript(
 			defaultExec,
@@ -97,6 +103,11 @@ export class BaseSdkCommands implements IAmDisposable {
 					? folderConfig.flutterRunAdditionalArgs // dartNativeRunAdditionalArgs.
 					: [];
 			allArgs = globalArgs.concat(subcommandArgs).concat(execution.args).concat(pubArgs);
+
+			const licenseKey = config.dartNativeLicenseKey?.trim();
+			if (licenseKey && !allArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
+				allArgs.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
+			}
 		} else {
 			allArgs = getGlobalFlutterArgs()
 				.concat(folderConfig.flutterAdditionalArgs)
@@ -118,13 +129,19 @@ export class BaseSdkCommands implements IAmDisposable {
 		const folderConfig = config.for(vs.Uri.file(folder));
 		const pubAdditional = folderConfig.pubAdditionalArgs;
 
-		if (isDartNative && this.sdks.flutter) {
-			const dnBinary = path.join(this.sdks.flutter, "bin", executableNames.dn);
-			if (fs.existsSync(dnBinary)) {
-				const globalArgs = folderConfig.flutterAdditionalArgs;
-				const dnArgs = globalArgs.concat(["pub", ...args]).concat(pubAdditional);
-				return this.runCommandInFolder(packageOrFolderDisplayName, folder, dnBinary, dnArgs, alwaysShowOutput, operationProgress);
+		if (isDartNative) {
+			const dnBinary = this.sdks.flutter ? path.join(this.sdks.flutter, "bin", executableNames.dn) : undefined;
+			if (!dnBinary || !fs.existsSync(dnBinary)) {
+				void promptToLocateDartNativeSdk(this.logger, "DartNative binary ('dn') not found. Package operations for DartNative projects require the 'dn' tool.", "dart.getPackages");
+				throw new Error("DartNative binary ('dn') not found. Package operations for DartNative projects require the 'dn' tool.");
 			}
+			const globalArgs = folderConfig.flutterAdditionalArgs;
+			const dnArgs = globalArgs.concat(["pub", ...args]).concat(pubAdditional);
+			const licenseKey = config.dartNativeLicenseKey?.trim();
+			if (licenseKey && !dnArgs.some((a) => a.startsWith("--dart-define=DN_LICENSE_KEY="))) {
+				dnArgs.push(`--dart-define=DN_LICENSE_KEY=${licenseKey}`);
+			}
+			return this.runCommandInFolder(packageOrFolderDisplayName, folder, dnBinary, dnArgs, alwaysShowOutput, operationProgress);
 		}
 
 		if (!this.sdks.dart)

@@ -285,7 +285,10 @@ class Config {
 	get dartNativeShowEmulators(): "local" | "always" | "never" { return this.flutterShowEmulators; }
 	get dartNativeTestAdditionalArgs(): string[] { return this.for().dartNativeTestAdditionalArgs; }
 
+	get dartNativeLicenseKey(): undefined | string { return this.getConfig<null | string>("dartNativeLicenseKey", null); }
+
 	// Options that can be set programatically.
+	public setDartNativeLicenseKey(value: string | undefined, target: ConfigurationTarget): Promise<void> { return this.setConfig("dartNativeLicenseKey", value, target); }
 	public setShowDebuggerNumbersAsHex(value: true | undefined): Promise<void> { return this.setConfig("showDebuggerNumbersAsHex", value, ConfigurationTarget.Global); }
 	public setCheckForSdkUpdates(value: boolean): Promise<void> { return this.setConfig("checkForSdkUpdates", value, ConfigurationTarget.Global); }
 	public setFlutterCreateOrganization(value: string | undefined): Promise<void> { return this.setConfig("flutterCreateOrganization", value, ConfigurationTarget.Global); }

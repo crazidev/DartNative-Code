@@ -24,10 +24,7 @@ abstract class SdkManager {
 	}
 
 	public changeSdk() {
-		if (this.sdkPaths?.length)
-			void this.promptForSdk(this.sdkPaths).catch((e) => this.logger.error(e));
-		else
-			void vs.window.showWarningMessage(`Set the "${this.configName}" setting to enable fast SDK switching.`);
+		void this.promptForSdk(this.sdkPaths || []).catch((e) => this.logger.error(e));
 	}
 
 	public async promptForSdk(sdkPaths: string[]): Promise<void> {
@@ -62,21 +59,31 @@ abstract class SdkManager {
 		})
 			.sort((a, b) => versionIsAtLeast(a.version || "0.0.0", b.version || "0.0.0") ? 1 : -1);
 
-		if (sdkItems.length === 0)
-			return;
+		const browseItem: SdkPickItem = {
+			description: "",
+			detail: "Browse the file system using folder picker",
+			folder: "__locate__",
+			label: "$(folder) Locate SDK (Browse...)",
+			version: undefined,
+		};
 
-		const items = [{
+		const items = ([{
 			description: !this.configuredSdk ? "Current setting" : "",
 			detail: !this.configuredSdk ? `Found at ${this.currentSdk}` : undefined,
 			folder: undefined,
 			label: "Auto-detect SDK location",
 			version: undefined,
-		} as SdkPickItem].concat(sdkItems);
+		} as SdkPickItem, browseItem]).concat(sdkItems);
 
 		await vs.window.showQuickPick(items, { placeHolder: "Select an SDK to use" })
 			.then((sdk) => {
 				if (!sdk)
 					return;
+
+				if (sdk.folder === "__locate__") {
+					void vs.commands.executeCommand("dart.locateDartNativeSdk");
+					return;
+				}
 
 				const folder = homeRelativePath(sdk.folder);
 				if (config.sdkSwitchingTarget === "global") {
