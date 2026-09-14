@@ -160,7 +160,7 @@ export class AddSdkToPath {
 		const shell = process.env.SHELL ? path.basename(process.env.SHELL) : undefined;
 		switch (shell) {
 			case "bash":
-				return ".bash_profile";
+				return isMac ? ".bash_profile" : ".bashrc";
 			case "zsh":
 				return ".zshenv";
 			default:
