@@ -1,9 +1,9 @@
 {
-	"name": "dartx",
+	"name": "dartnative",
 	"displayName": "DartNative",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
 	"version": "3.144.0-dev",
-	"publisher": "Dart-Code",
+	"publisher": "Beatcode-studio",
 	"engines": {
 		"vscode": "^1.101.0"
 	},
@@ -878,11 +878,11 @@
 				},
 				{
 					"command": "pub.get",
-					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "pub.get.all",
-					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "dart.task.dartdoc",
@@ -894,15 +894,15 @@
 				},
 				{
 					"command": "pub.upgrade",
-					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "pub.upgrade.majorVersions",
-					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "pub.outdated",
-					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "dart.writeRecommendedSettings",
@@ -910,11 +910,11 @@
 				},
 				{
 					"command": "dart.addDependency",
-					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "dart.addDevDependency",
-					"when": "dart-code:anyProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "_dart.removeDependency",
@@ -1034,23 +1034,23 @@
 				},
 				{
 					"command": "flutter.packages.get",
-					"when": "dart-code:anyFlutterProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "flutter.packages.get.all",
-					"when": "dart-code:anyFlutterProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "flutter.packages.upgrade",
-					"when": "dart-code:anyFlutterProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "flutter.packages.upgrade.majorVersions",
-					"when": "dart-code:anyFlutterProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "flutter.packages.outdated",
-					"when": "dart-code:anyFlutterProjectLoaded && config.dartx.enablePub"
+					"when": "dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub"
 				},
 				{
 					"command": "flutter.clean",
@@ -1201,7 +1201,7 @@
 				},
 				{
 					"command": "flutter.launchEmulator",
-					"when": "dart-code:anyFlutterProjectLoaded && dart-code:isRunningLocally && config.dartx.dartNativeShowEmulators == local || dart-code:anyFlutterProjectLoaded && config.dartx.dartNativeShowEmulators == always"
+					"when": "dart-code:anyFlutterProjectLoaded && dart-code:isRunningLocally && config.dartnative.dartNativeShowEmulators == local || dart-code:anyFlutterProjectLoaded && config.dartnative.dartNativeShowEmulators == always"
 				},
 				{
 					"command": "dart.edit.fixAllInWorkspace",
@@ -1281,12 +1281,12 @@
 			"debug/variables/context": [
 				{
 					"command": "_dart.showDebuggerNumbersAsHex",
-					"when": "inDebugMode && debugType == dart && dart-code:supportsDebugValueFormat && !config.dartx.showDebuggerNumbersAsHex",
+					"when": "inDebugMode && debugType == dart && dart-code:supportsDebugValueFormat && !config.dartnative.showDebuggerNumbersAsHex",
 					"group": "9_debug@5"
 				},
 				{
 					"command": "_dart.showDebuggerNumbersAsDecimal",
-					"when": "inDebugMode && debugType == dart && dart-code:supportsDebugValueFormat && config.dartx.showDebuggerNumbersAsHex",
+					"when": "inDebugMode && debugType == dart && dart-code:supportsDebugValueFormat && config.dartnative.showDebuggerNumbersAsHex",
 					"group": "9_debug@5"
 				}
 			],
@@ -1321,34 +1321,34 @@
 			],
 			"editor/title": [
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "pub.get",
 					"group": "navigation@1"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "pub.upgrade",
 					"alt": "pub.upgrade.majorVersions",
 					"group": "navigation@2"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "pub.outdated",
 					"group": "navigation@3"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.get",
 					"group": "navigation@1"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.upgrade",
 					"alt": "flutter.packages.upgrade.majorVersions",
 					"group": "navigation@2"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.outdated",
 					"group": "navigation@3"
 				},
@@ -1370,35 +1370,35 @@
 			],
 			"editor/context": [
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "pub.get"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "pub.upgrade"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "pub.upgrade.majorVersions"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyProjectLoaded && !dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "pub.outdated"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.get"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.upgrade"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.upgrade.majorVersions"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.outdated"
 				},
 				{
@@ -1438,19 +1438,19 @@
 					"command": "pub.outdated"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.get"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.upgrade"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.upgrade.majorVersions"
 				},
 				{
-					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartx.enablePub",
+					"when": "resourceFilename == pubspec.yaml && dart-code:anyFlutterProjectLoaded && config.dartnative.enablePub",
 					"command": "flutter.packages.outdated"
 				},
 				{
@@ -1657,7 +1657,7 @@
 				"title": "Analyzer",
 				"order": 1,
 				"properties": {
-					"dartx.analysisExcludedFolders": {
+					"dartnative.analysisExcludedFolders": {
 						"type": "array",
 						"default": [],
 						"description": "An array of paths to be excluded from Dart analysis. This option should usually be set at the Workspace level. Excluded folders will also be ignored when detecting project types.",
@@ -1666,7 +1666,7 @@
 						},
 						"scope": "resource"
 					},
-					"dartx.analyzerAdditionalArgs": {
+					"dartnative.analyzerAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"description": "Additional arguments to pass to the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server.",
@@ -1675,7 +1675,7 @@
 							"type": "string"
 						}
 					},
-					"dartx.analyzerVmAdditionalArgs": {
+					"dartnative.analyzerVmAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"description": "Additional arguments to pass to the VM running the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server.",
@@ -1684,7 +1684,7 @@
 							"type": "string"
 						}
 					},
-					"dartx.analyzerDiagnosticsPort": {
+					"dartnative.analyzerDiagnosticsPort": {
 						"type": [
 							"null",
 							"number"
@@ -1693,7 +1693,7 @@
 						"description": "The port number to be used for the Dart analyzer diagnostic server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server.",
 						"scope": "window"
 					},
-					"dartx.analyzerPath": {
+					"dartnative.analyzerPath": {
 						"type": [
 							"null",
 							"string"
@@ -1702,7 +1702,7 @@
 						"description": "The path to a custom Dart Analysis Server. This setting is intended for use by Dart Analysis Server developers. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows).",
 						"scope": "machine-overridable"
 					},
-					"dartx.analyzerSshHost": {
+					"dartnative.analyzerSshHost": {
 						"type": [
 							"null",
 							"string"
@@ -1711,7 +1711,7 @@
 						"description": "An SSH host to run the Analysis Server.\nThis can be useful when modifying code on a remote machine using SSHFS.",
 						"scope": "window"
 					},
-					"dartx.analyzerVmServicePort": {
+					"dartnative.analyzerVmServicePort": {
 						"type": [
 							"null",
 							"number"
@@ -1720,20 +1720,20 @@
 						"description": "The port number to be used for the Dart Analysis Server VM service. This setting is intended for use by Dart Analysis Server developers.",
 						"scope": "window"
 					},
-					"dartx.includeDependenciesInWorkspaceSymbols": {
+					"dartnative.includeDependenciesInWorkspaceSymbols": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to include symbols from the SDK and package dependencies in the \"Go to Symbol in Workspace\" (`cmd/ctrl`+`T`) list. This can only be disabled when using Dart 3.0 or later.",
 						"scope": "window",
 						"description": "Whether to include symbols from the SDK and package dependencies in the \"Go to Symbol in Workspace\" (`cmd/ctrl`+`T`) list. This can only be disabled when using Dart 3.0 or later."
 					},
-					"dartx.notifyAnalyzerErrors": {
+					"dartnative.notifyAnalyzerErrors": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show a notification the first few times an Analysis Server exception occurs.",
 						"scope": "window"
 					},
-					"dartx.showTodos": {
+					"dartnative.showTodos": {
 						"type": [
 							"boolean",
 							"array"
@@ -1745,7 +1745,7 @@
 						"description": "Whether to show TODOs in the Problems list. Can be a boolean to enable all TODO comments (TODO, FIXME, HACK, UNDONE) or an array of which types to enable. Older Dart SDKs may not support some TODO kinds.",
 						"scope": "window"
 					},
-					"dartx.showExtensionRecommendations": {
+					"dartnative.showExtensionRecommendations": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show recommendations for other VS Code extensions based on the packages you're using.",
@@ -1757,7 +1757,7 @@
 				"title": "DevTools",
 				"order": 1,
 				"properties": {
-					"dartx.devToolsBrowser": {
+					"dartnative.devToolsBrowser": {
 						"enum": [
 							"chrome",
 							"default"
@@ -1770,7 +1770,7 @@
 						"description": "Whether to launch external DevTools windows using Chrome or the system default browser. This setting is ignored for remote workspaces (including Docker, SSH, WSL).",
 						"scope": "window"
 					},
-					"dartx.devToolsPort": {
+					"dartnative.devToolsPort": {
 						"type": [
 							"null",
 							"number"
@@ -1779,13 +1779,13 @@
 						"description": "The port number to be used for the Dart DevTools (requires restart).",
 						"scope": "window"
 					},
-					"dartx.devToolsReuseWindows": {
+					"dartnative.devToolsReuseWindows": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to try to reuse existing DevTools windows instead of launching new ones. Only works for instances of DevTools launched by the DevTools server on the local machine.",
 						"scope": "window"
 					},
-					"dartx.devToolsTheme": {
+					"dartnative.devToolsTheme": {
 						"enum": [
 							"dark",
 							"light"
@@ -1794,7 +1794,7 @@
 						"description": "The theme to use for Dart DevTools.",
 						"scope": "window"
 					},
-					"dartx.devToolsLocation": {
+					"dartnative.devToolsLocation": {
 						"type": "object",
 						"properties": {
 							"inspector": {
@@ -1917,7 +1917,7 @@
 						"markdownDescription": "Where to open [Dart DevTools](https://dart.dev/tools/dart-devtools) pages.",
 						"scope": "window"
 					},
-					"dartx.openDevTools": {
+					"dartnative.openDevTools": {
 						"enum": [
 							"never",
 							"flutter",
@@ -1932,7 +1932,7 @@
 						"description": "Whether to automatically open DevTools at the start of a debug session.",
 						"scope": "window"
 					},
-					"dartx.closeDevTools": {
+					"dartnative.closeDevTools": {
 						"enum": [
 							"never",
 							"ifOpened",
@@ -1947,7 +1947,7 @@
 						"description": "Whether to automatically close embedded DevTools tabs when a debug session ends.",
 						"scope": "window"
 					},
-					"dartx.customDevTools": {
+					"dartnative.customDevTools": {
 						"type": "object",
 						"properties": {
 							"path": {
@@ -1981,13 +1981,13 @@
 				"title": "Editor",
 				"order": 1,
 				"properties": {
-					"dartx.autoImportCompletions": {
+					"dartnative.autoImportCompletions": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to include symbols that have not been imported in the code completion list and automatically insert the required import when selecting them (requires restart).",
 						"scope": "window"
 					},
-					"dartx.automaticCommentSlashes": {
+					"dartnative.automaticCommentSlashes": {
 						"enum": [
 							"none",
 							"tripleSlash",
@@ -2002,19 +2002,19 @@
 						],
 						"scope": "window"
 					},
-					"dartx.closingLabels": {
+					"dartnative.closingLabels": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show annotations against constructor, method invocations and lists that span multiple lines.",
 						"scope": "window"
 					},
-					"dartx.closingLabelsPrefix": {
+					"dartnative.closingLabelsPrefix": {
 						"type": "string",
 						"default": " // ",
 						"description": "The prefix to use in closing labels.",
 						"scope": "window"
 					},
-					"dartx.closingLabelsTextStyle": {
+					"dartnative.closingLabelsTextStyle": {
 						"type": "string",
 						"enum": [
 							"normal",
@@ -2028,13 +2028,13 @@
 						"markdownDescription": "The text style to use in closing labels. Using _Italic_ requires a font that supports italic text.",
 						"scope": "window"
 					},
-					"dartx.completeFunctionCalls": {
+					"dartnative.completeFunctionCalls": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to insert parentheses and placeholders for positional and required arguments during code completions when using LSP. This feature is automatically disabled if commit characters are enabled.",
 						"scope": "resource"
 					},
-					"dartx.documentation": {
+					"dartnative.documentation": {
 						"type": [
 							"null",
 							"string"
@@ -2052,19 +2052,19 @@
 						"markdownDescription": "What level of documentation to show in Hovers and Code Completion details. When `null`, defaults to 'full' when running locally and 'none' in remote workspaces. This setting is only supported for Dart SDKs after v2.18.",
 						"scope": "window"
 					},
-					"dartx.dtdEditorActiveLocationDelay": {
+					"dartnative.dtdEditorActiveLocationDelay": {
 						"type": "integer",
 						"default": 200,
 						"markdownDescription": "How long (in ms) to delay sending editor location change events over the Dart Tooling Daemon. Increasing this results in less events which may improve performance, at the expensive of tools that use these events not updating as quickly after your location/editor changes (requires restart).",
 						"scope": "window"
 					},
-					"dartx.enableServerSnippets": {
+					"dartnative.enableServerSnippets": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to use code snippets from the Dart Analysis Server instead of those included in the extension. Server snippets are context and language-version aware and should be preferred.",
 						"scope": "window"
 					},
-					"dartx.hotReloadPatterns": {
+					"dartnative.hotReloadPatterns": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "An array of glob patterns that should trigger Hot Reload when saved. The pattern is matched against the absolute path of the file. Use `**/assets/**` to trigger reloading for everything in the assets directory. Must always start with \"**/\" and use forward slashes (even on Windows) as backslashes are used for escaping.",
@@ -2073,25 +2073,25 @@
 						},
 						"scope": "resource"
 					},
-					"dartx.enableCompletionCommitCharacters": {
+					"dartnative.enableCompletionCommitCharacters": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "Whether to automatically commit the selected completion item when pressing certain keys such as . , ( and \\[. This setting does not currently apply to LSP, see `#dartx.previewCommitCharacters#`.",
+						"markdownDescription": "Whether to automatically commit the selected completion item when pressing certain keys such as . , ( and \\[. This setting does not currently apply to LSP, see `#dartnative.previewCommitCharacters#`.",
 						"scope": "resource"
 					},
-					"dartx.enableSdkFormatter": {
+					"dartnative.enableSdkFormatter": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to enable the [dart_style](https://pub.dev/packages/dart_style) formatter for Dart code.",
 						"scope": "window"
 					},
-					"dartx.enableSnippets": {
+					"dartnative.enableSnippets": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to include Dart and DartNative snippets in code completion.",
 						"scope": "window"
 					},
-					"dartx.inlayHints": {
+					"dartnative.inlayHints": {
 						"type": [
 							"boolean",
 							"object"
@@ -2215,19 +2215,19 @@
 							}
 						}
 					},
-					"dartx.insertArgumentPlaceholders": {
+					"dartnative.insertArgumentPlaceholders": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to insert argument placeholders during code completions. This feature is automatically disabled when `enableCompletionCommitCharacters` is enabled.",
 						"scope": "resource"
 					},
-					"dartx.lspSnippetTextEdits": {
+					"dartnative.lspSnippetTextEdits": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to enable [Snippet support in LSP TextEdits](https://github.com/rust-analyzer/rust-analyzer/blob/979e788957ced1957ee9ac1da70fb97abf9fe2b1/docs/dev/lsp-extensions.md#snippet-textedit).",
 						"scope": "window"
 					},
-					"dartx.renameFilesWithClasses": {
+					"dartnative.renameFilesWithClasses": {
 						"default": "never",
 						"enum": [
 							"never",
@@ -2237,37 +2237,37 @@
 						"markdownDescription": "Whether to rename files when renaming classes with matching names (for example renaming 'class Person' inside 'person.dart'). If set to 'prompt', will ask each time before renaming. If set to 'always', the file will automatically be renamed. This setting requires using LSP and a Dart SDK of at least v2.15.",
 						"scope": "window"
 					},
-					"dartx.showDartPadSampleCodeLens": {
+					"dartnative.showDartPadSampleCodeLens": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show CodeLens actions in the editor for opening online DartPad samples.",
 						"scope": "window"
 					},
-					"dartx.showMainCodeLens": {
+					"dartnative.showMainCodeLens": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show CodeLens actions in the editor for quick running / debugging scripts with main functions.",
 						"scope": "window"
 					},
-					"dartx.showTestCodeLens": {
+					"dartnative.showTestCodeLens": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show CodeLens actions in the editor for quick running / debugging tests.",
 						"scope": "window"
 					},
-					"dartx.updateImportsOnRename": {
+					"dartnative.updateImportsOnRename": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to automatically update imports when moving or renaming files. Currently only supports single file moves / renames.",
 						"scope": "window"
 					},
-					"dartx.warnWhenEditingFilesOutsideWorkspace": {
+					"dartnative.warnWhenEditingFilesOutsideWorkspace": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show a warning when modifying files outside of the workspace.",
 						"scope": "window"
 					},
-					"dartx.warnWhenEditingFilesInPubCache": {
+					"dartnative.warnWhenEditingFilesInPubCache": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to show a warning when modifying files in the [system package cache](https://dart.dev/tools/pub/glossary#system-cache) directory.",
@@ -2279,13 +2279,13 @@
 				"title": "DartNative",
 				"order": 1,
 				"properties": {
-					"dartx.offline": {
+					"dartnative.offline": {
 						"type": "boolean",
 						"default": false,
 						"description": "Whether to use the --offline switch for commands like 'pub get' and 'DartNative: Create New Project'.",
 						"scope": "window"
 					},
-					"dartx.hotReloadOnSave": {
+					"dartnative.hotReloadOnSave": {
 						"enum": [
 							"never",
 							"manual",
@@ -2305,31 +2305,46 @@
 						"scope": "window",
 						"description": "Whether to automatically send a Hot Reload request to Dart apps during a debug session when saving files. DartNative apps are controlled by the dartNativeHotReloadOnSave setting."
 					},
-					"dartx.enableWidgetRefactors": {
+					"dartnative.enableWidgetRefactors": {
 						"type": "boolean",
 						"default": true,
-						"markdownDescription": "Whether to enable built-in DartX widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin.",
+						"markdownDescription": "Whether to enable built-in DartNative widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin.",
 						"scope": "resource"
 					},
-					"dartx.formatAfterSnippet": {
+					"dartnative.formatAfterSnippet": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to automatically format the document after inserting widget snippets (such as `stless` and `stful`).",
 						"scope": "resource"
 					},
-					"dartx.formatAfterRefactoring": {
+					"dartnative.formatAfterRefactoring": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to automatically format the document after applying refactorings (such as Extract Widget, Wrap with Widget, and state conversions).",
 						"scope": "resource"
 					},
-					"dartx.moveNonFinalFieldsToState": {
+					"dartnative.moveNonFinalFieldsToState": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers.",
 						"scope": "resource"
 					},
-					"dartx.dartNativeAdditionalArgs": {
+					"dartnative.dartNativeLicenseKey": {
+						"type": [
+							"null",
+							"string"
+						],
+						"default": null,
+						"markdownDescription": "The DartNative license key. When configured, this is exported as the environment variable `DN_LICENSE_KEY` and passed to `dn run` as `--dart-define=DN_LICENSE_KEY=<key>`.",
+						"scope": "window"
+					},
+					"dartnative.showCommandsWhenSdkMissing": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Whether to show other commands (such as Get Packages) in the command palette when the DartNative SDK is missing or not configured.",
+						"scope": "window"
+					},
+					"dartnative.dartNativeAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional arguments to pass to `dartnative` commands, including the daemon. Arguments are passed directly to `dn`.",
@@ -2339,7 +2354,7 @@
 						},
 						"description": "Additional arguments to pass to `dartnative` commands, including the daemon. Arguments are passed directly to `dn`."
 					},
-					"dartx.dartNativeCreatePlatforms": {
+					"dartnative.dartNativeCreatePlatforms": {
 						"type": "array",
 						"items": {
 							"type": "string",
@@ -2355,19 +2370,19 @@
 						"description": "The platforms to enable for new projects created using the 'DartNative: Create New Project' command. Only 'android' and 'ios' are supported for DartNative.",
 						"scope": "window"
 					},
-					"dartx.dartNativeCreatePromptForPlatforms": {
+					"dartnative.dartNativeCreatePromptForPlatforms": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to prompt for platforms when running 'DartNative: Create New Project'.",
 						"scope": "window"
 					},
-					"dartx.dartNativeGutterIcons": {
+					"dartnative.dartNativeGutterIcons": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show DartNative icons and colors in the editor gutter.",
 						"scope": "window"
 					},
-					"dartx.dartNativeHotReloadOnSave": {
+					"dartnative.dartNativeHotReloadOnSave": {
 						"enum": [
 							"never",
 							"manual",
@@ -2387,13 +2402,13 @@
 						"scope": "window",
 						"description": "Whether to automatically send a Hot Reload request to DartNative apps during a debug session when saving files. Dart apps are controlled by the hotReloadOnSave setting."
 					},
-					"dartx.dartNativeRememberSelectedDevice": {
+					"dartnative.dartNativeRememberSelectedDevice": {
 						"type": "boolean",
 						"default": true,
-						"description": "Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dartx.dartNativeSelectDeviceWhenConnected#` setting).",
+						"description": "Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dartnative.dartNativeSelectDeviceWhenConnected#` setting).",
 						"scope": "window"
 					},
-					"dartx.dartNativeRunAdditionalArgs": {
+					"dartnative.dartNativeRunAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional arguments to pass when running `dartnative` applications in debug or run mode. Arguments are passed directly to `dn run`.",
@@ -2403,7 +2418,7 @@
 						},
 						"description": "Additional arguments to pass when running `dartnative` applications in debug or run mode. Arguments are passed directly to `dn run`."
 					},
-					"dartx.dartNativeScreenshotPath": {
+					"dartnative.dartNativeScreenshotPath": {
 						"type": [
 							"null",
 							"string"
@@ -2412,13 +2427,13 @@
 						"description": "The path to a directory to save DartNative screenshots. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows).",
 						"scope": "machine-overridable"
 					},
-					"dartx.dartNativeSelectDeviceWhenConnected": {
+					"dartnative.dartNativeSelectDeviceWhenConnected": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to set newly connected devices as the current device in DartNative projects.",
 						"scope": "window"
 					},
-					"dartx.dartNativeShowEmulators": {
+					"dartnative.dartNativeShowEmulators": {
 						"enum": [
 							"local",
 							"always",
@@ -2434,7 +2449,7 @@
 						"scope": "window",
 						"description": "When to show DartNative emulators. These are usually hidden for remote workspaces because it is usually not possible to see or interact with emulators in a remote session. If you are using remoting/containers in a way that you can interact with launched emulator processes, you may wish to set this to 'always'."
 					},
-					"dartx.dartNativeTestAdditionalArgs": {
+					"dartnative.dartNativeTestAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional args to pass to the `dartnative test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects.",
@@ -2443,21 +2458,6 @@
 							"type": "string"
 						},
 						"description": "Additional args to pass to the `dartnative test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects."
-					},
-					"dartx.dartNativeLicenseKey": {
-						"type": [
-							"null",
-							"string"
-						],
-						"default": null,
-						"markdownDescription": "The DartNative license key. When configured, this is exported as the environment variable `DN_LICENSE_KEY` and passed to `dn run` as `--dart-define=DN_LICENSE_KEY=<key>`.",
-						"scope": "window"
-					},
-					"dartx.showCommandsWhenSdkMissing": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "Whether to show other commands (such as Get Packages) in the command palette when the DartNative SDK is missing or not configured.",
-						"scope": "window"
 					}
 				}
 			},
@@ -2465,7 +2465,7 @@
 				"title": "Logging",
 				"order": 1,
 				"properties": {
-					"dartx.analyzerInstrumentationLogFile": {
+					"dartnative.analyzerInstrumentationLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2474,7 +2474,7 @@
 						"markdownDescription": "The path to a log file for very detailed logging in the Dart Analysis Server that may be useful when trying to diagnose Analysis Server issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is.",
 						"scope": "machine-overridable"
 					},
-					"dartx.analyzerLogFile": {
+					"dartnative.analyzerLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2483,7 +2483,7 @@
 						"markdownDescription": "The path to a log file for communication between Dart Code and the Analysis Server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is.",
 						"scope": "machine-overridable"
 					},
-					"dartx.toolingDaemonLogFile": {
+					"dartnative.toolingDaemonLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2493,7 +2493,7 @@
 						"scope": "machine-overridable",
 						"description": "The path to a log file for the `dart tooling-daemon` service, which coordinates between various Dart and DartNative tools and extensions. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
 					},
-					"dartx.dapLogFile": {
+					"dartnative.dapLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2503,7 +2503,7 @@
 						"scope": "machine-overridable",
 						"description": "The path to a log file for communication with the DAP debug adapters. This is useful when trying to diagnose issues with debugging such as missed breakpoints. Use `${name}` in the log file name to insert the Debug Session name to prevent concurrent debug sessions overwriting each others logs. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `${kind}` to insert a description of the kind of debug session ('dart', 'dart_test', 'dartnative' etc.). Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
 					},
-					"dartx.devToolsLogFile": {
+					"dartnative.devToolsLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2512,7 +2512,7 @@
 						"markdownDescription": "The path to a low-traffic log file for the Dart DevTools service. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is.",
 						"scope": "machine-overridable"
 					},
-					"dartx.extensionLogFile": {
+					"dartnative.extensionLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2521,7 +2521,7 @@
 						"markdownDescription": "The path to a low-traffic log file for basic extension and editor issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is.",
 						"scope": "machine-overridable"
 					},
-					"dartx.mcpServerLogFile": {
+					"dartnative.mcpServerLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2530,13 +2530,13 @@
 						"markdownDescription": "The path to a log file for the Dart SDK's MCP server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is.",
 						"scope": "machine-overridable"
 					},
-					"dartx.maxLogLineLength": {
+					"dartnative.maxLogLineLength": {
 						"type": "number",
 						"default": 2000,
 						"description": "The maximum length of a line in the log file. Lines longer than this will be truncated and suffixed with an ellipsis.",
 						"scope": "window"
 					},
-					"dartx.maxCompletionItems": {
+					"dartnative.maxCompletionItems": {
 						"type": [
 							"null",
 							"number"
@@ -2544,7 +2544,7 @@
 						"description": "The maximum number of completion items to return from a code completion request. Updated results will be fetched as additional characters are typed. Lower numbers may improved performance. Defaults to a lower value in remote workspaces. Only affects LSP for > Dart SDK 2.17.",
 						"scope": "window"
 					},
-					"dartx.dartNativeDaemonLogFile": {
+					"dartnative.dartNativeDaemonLogFile": {
 						"type": [
 							"null",
 							"string"
@@ -2560,19 +2560,19 @@
 				"title": "Pub",
 				"order": 1,
 				"properties": {
-					"dartx.enablePub": {
+					"dartnative.enablePub": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to enable functionality for using Pub. Turning this setting off will prevent the extension from ever running pub and hide all commands relating to this. Use this if you are using an alternative package manager.",
 						"scope": "window"
 					},
-					"dartx.promptToGetPackages": {
+					"dartnative.promptToGetPackages": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to prompt to get/upgrade packages when opening a project with missing/out of date packages.",
 						"scope": "resource"
 					},
-					"dartx.pubAdditionalArgs": {
+					"dartnative.pubAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional args to pass to all `pub` commands (such as `dn pub get`, `flutter pub get`, or `dart pub get`).",
@@ -2582,7 +2582,7 @@
 						},
 						"description": "Additional args to pass to all `pub` commands (such as `dn pub get`, `flutter pub get`, or `dart pub get`)."
 					},
-					"dartx.runPubGetOnPubspecChanges": {
+					"dartnative.runPubGetOnPubspecChanges": {
 						"enum": [
 							"always",
 							"prompt",
@@ -2597,7 +2597,7 @@
 						"markdownDescription": "Whether to run `pub get` whenever `pubspec.yaml` is saved.",
 						"scope": "resource"
 					},
-					"dartx.runPubGetOnNestedProjects": {
+					"dartnative.runPubGetOnNestedProjects": {
 						"enum": [
 							"none",
 							"both",
@@ -2614,7 +2614,7 @@
 						"markdownDescription": "Whether to automatically run `pub get` on nested projects above or below the one where the pubspec was changed.",
 						"scope": "window"
 					},
-					"dartx.runPubConcurrently": {
+					"dartnative.runPubConcurrently": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to run Pub operations across multiple folders concurrently.",
@@ -2626,7 +2626,7 @@
 				"title": "Run and Debug",
 				"order": 1,
 				"properties": {
-					"dartx.buildRunnerAdditionalArgs": {
+					"dartnative.buildRunnerAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional args to pass to the `build_runner` when building/watching/serving.",
@@ -2635,7 +2635,7 @@
 							"type": "string"
 						}
 					},
-					"dartx.cliConsole": {
+					"dartnative.cliConsole": {
 						"enum": [
 							"debugConsole",
 							"terminal",
@@ -2650,7 +2650,7 @@
 						],
 						"scope": "window"
 					},
-					"dartx.debugExtensionBackendProtocol": {
+					"dartnative.debugExtensionBackendProtocol": {
 						"enum": [
 							"sse",
 							"ws"
@@ -2663,38 +2663,38 @@
 						"description": "The protocol to use for the Dart Debug Extension backend service and injected client. Using WebSockets can improve performance but may fail when connecting through some proxy servers.",
 						"scope": "window"
 					},
-					"dartx.debugSdkLibraries": {
+					"dartnative.debugSdkLibraries": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Whether to mark Dart SDK libraries (`dart:*`) as debuggable, enabling stepping into them while debugging.",
 						"scope": "window"
 					},
-					"dartx.debugExternalPackageLibraries": {
+					"dartnative.debugExternalPackageLibraries": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Whether to mark external pub package libraries (including `package:dartnative`) as debuggable, enabling stepping into them while debugging.",
 						"scope": "window",
 						"description": "Whether to mark external pub package libraries (including `package:dartnative`) as debuggable, enabling stepping into them while debugging."
 					},
-					"dartx.evaluateGettersInDebugViews": {
+					"dartnative.evaluateGettersInDebugViews": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to evaluate getters in order to display them in debug views (such as the Variables, Watch and Hovers views).",
 						"scope": "resource"
 					},
-					"dartx.showGettersInDebugViews": {
+					"dartnative.showGettersInDebugViews": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to show getters in order to display them in debug views (such as the Variables, Watch and Hovers views). If `evaluateGettersInDebugViews` is `true` getters will be eagerly evaluated, otherwise they will require clicking to evaluate.",
 						"scope": "resource"
 					},
-					"dartx.evaluateToStringInDebugViews": {
+					"dartnative.evaluateToStringInDebugViews": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to call toString() on objects when rendering them in debug views (such as the Variables, Watch and Hovers views). Only applies to views of 100 or fewer values for performance reasons.",
 						"scope": "window"
 					},
-					"dartx.hotReloadProgress": {
+					"dartnative.hotReloadProgress": {
 						"enum": [
 							"notification",
 							"statusBar"
@@ -2707,31 +2707,31 @@
 						"description": "Determines how to display Hot Restart and Hot Reload progress.",
 						"scope": "window"
 					},
-					"dartx.promptToRunIfErrors": {
+					"dartnative.promptToRunIfErrors": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to prompt before running if there are errors in your project. Test scripts will be excluded from the check unless they're the script being run.",
 						"scope": "window"
 					},
-					"dartx.showDartDeveloperLogs": {
+					"dartnative.showDartDeveloperLogs": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to show logs from the `dart:developer` `log()` function in the debug console.",
 						"scope": "resource"
 					},
-					"dartx.showDebuggerNumbersAsHex": {
+					"dartnative.showDebuggerNumbersAsHex": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Whether to show integers formatted as Hex in Variables, Watch, Debug Consoles.",
 						"scope": "window"
 					},
-					"dartx.showDevToolsDebugToolBarButtons": {
+					"dartnative.showDevToolsDebugToolBarButtons": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to show DevTools buttons in the floating Debug toolbar.",
 						"scope": "window"
 					},
-					"dartx.suppressTestTimeouts": {
+					"dartnative.suppressTestTimeouts": {
 						"enum": [
 							"never",
 							"debug",
@@ -2746,7 +2746,7 @@
 						"markdownDescription": "Whether to suppress test timeouts when running/debugging tests. To work properly this requires package:test version 1.20.1 or newer. For older versions, the default timeout will be increased to 1d but this will not affect tests that have explicit (non-factor) timeouts set with @timeout.",
 						"scope": "resource"
 					},
-					"dartx.cliAdditionalArgs": {
+					"dartnative.cliAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional args to pass to the `dart` command when running CLI scripts. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects.",
@@ -2755,7 +2755,7 @@
 							"type": "string"
 						}
 					},
-					"dartx.testAdditionalArgs": {
+					"dartnative.testAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional args to pass to the `dart test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects.",
@@ -2764,7 +2764,7 @@
 							"type": "string"
 						}
 					},
-					"dartx.vmAdditionalArgs": {
+					"dartnative.vmAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Arguments to be passed to the Dart VM when running Dart CLI scripts/tests.\n\nThese arguments appear after \"dart\" but before subcommands like \"test\":\n\n`dart (vmAdditionalArgs) test (toolArgs) test/my_test.dart (args)`",
@@ -2773,7 +2773,7 @@
 							"type": "string"
 						}
 					},
-					"dartx.customDartDapPath": {
+					"dartnative.customDartDapPath": {
 						"type": [
 							"null",
 							"string"
@@ -2788,13 +2788,13 @@
 				"title": "SDK",
 				"order": 1,
 				"properties": {
-					"dartx.checkForSdkUpdates": {
+					"dartnative.checkForSdkUpdates": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to check you are using the latest version of the Dart SDK at startup.",
 						"scope": "window"
 					},
-					"dartx.sdkSwitchingTarget": {
+					"dartnative.sdkSwitchingTarget": {
 						"enum": [
 							"workspace",
 							"global"
@@ -2807,20 +2807,20 @@
 						"description": "Where to save SDK selections when using fast SDK switching from the language status entry.",
 						"scope": "window"
 					},
-					"dartx.addSdkToTerminalPath": {
+					"dartnative.addSdkToTerminalPath": {
 						"type": "boolean",
 						"default": true,
-						"markdownDescription": "Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartx..dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart).",
+						"markdownDescription": "Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartnative.dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart).",
 						"scope": "window",
-						"description": "Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartx..dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart)."
+						"description": "Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartnative.dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart)."
 					},
-					"dartx.mcpServer": {
+					"dartnative.mcpServer": {
 						"type": "boolean",
 						"default": true,
 						"description": "Whether to register the Dart SDK's MCP server with VS Code. This only applies to Dart SDKs >= v3.9.0 which added the server.",
 						"scope": "window"
 					},
-					"dartx.mcpServerTools": {
+					"dartnative.mcpServerTools": {
 						"type": "object",
 						"default": {
 							"analyze_files": false,
@@ -2834,17 +2834,17 @@
 						},
 						"scope": "window"
 					},
-					"dartx.dartNativeSdkPath": {
+					"dartnative.dartNativeSdkPath": {
 						"type": [
 							"null",
 							"string"
 						],
 						"default": null,
-						"markdownDescription": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows).",
+						"markdownDescription": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartNative will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows).",
 						"scope": "machine-overridable",
-						"description": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
+						"description": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartNative will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
 					},
-					"dartx.dartNativeSdkPaths": {
+					"dartnative.dartNativeSdkPaths": {
 						"type": "array",
 						"default": [],
 						"description": "An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and runtime are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows).",
@@ -2859,14 +2859,14 @@
 				"title": "Testing",
 				"order": 1,
 				"properties": {
-					"dartx.allowTestsOutsideTestFolder": {
+					"dartnative.allowTestsOutsideTestFolder": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Whether to consider files ending `_test.dart` that are outside of the test directory as tests. This should be enabled if you put tests inside the `lib` directory of your DartNative app so they will be run with test commands.",
 						"scope": "window",
 						"description": "Whether to consider files ending `_test.dart` that are outside of the test directory as tests. This should be enabled if you put tests inside the `lib` directory of your DartNative app so they will be run with test commands."
 					},
-					"dartx.coverageExcludePatterns": {
+					"dartnative.coverageExcludePatterns": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "An array of glob patterns to exclude from code coverage results. Paths matching any of these patterns will still be collected by the Dart VM but not be included in coverage reported to VS Code.",
@@ -2875,7 +2875,7 @@
 						},
 						"scope": "window"
 					},
-					"dartx.openTestView": {
+					"dartnative.openTestView": {
 						"type": "array",
 						"items": {
 							"enum": [
@@ -2889,13 +2889,13 @@
 						"description": "When to automatically switch focus to the test list (array to support multiple values).",
 						"scope": "window"
 					},
-					"dartx.showSkippedTests": {
+					"dartnative.showSkippedTests": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to show skipped tests in the test tree.",
 						"scope": "window"
 					},
-					"dartx.testInvocationMode": {
+					"dartnative.testInvocationMode": {
 						"enum": [
 							"name",
 							"line"
@@ -2910,19 +2910,19 @@
 				"title": "Other",
 				"order": 2,
 				"properties": {
-					"dartx.projectSearchDepth": {
+					"dartnative.projectSearchDepth": {
 						"type": "number",
 						"default": 5,
 						"description": "How many levels (including the workspace roots) down the workspace to search for Dart/DartNative projects. Increasing this number may help detect DartNative projects that are deeply nested in your workspace but slow down all operations that search for projects, including extension activation (requires restart).",
 						"scope": "window"
 					},
-					"dartx.env": {
+					"dartnative.env": {
 						"type": "object",
 						"default": {},
-						"description": "Additional environment variables to be added to all Dart/DartNative processes spawned by the DartX extension.",
+						"description": "Additional environment variables to be added to all Dart/DartNative processes spawned by the DartNative extension.",
 						"scope": "window"
 					},
-					"dartx.toolingDaemonAdditionalArgs": {
+					"dartnative.toolingDaemonAdditionalArgs": {
 						"type": "array",
 						"default": [],
 						"markdownDescription": "Additional args to pass to the `dart tooling-daemon` command that runs as a background service (requires restart).",
@@ -2937,13 +2937,13 @@
 				"title": "Experimental",
 				"order": 3,
 				"properties": {
-					"dartx.normalizeFileCasing": {
+					"dartnative.normalizeFileCasing": {
 						"type": "boolean",
 						"default": false,
 						"description": "Whether to normalize file casings before sending them to the LSP server. This may fix issues with file_names lints not disappearing after renaming a file if the VS Code API continues to use the original casing.",
 						"scope": "window"
 					},
-					"dartx.daemonPort": {
+					"dartnative.daemonPort": {
 						"type": [
 							"null",
 							"number"
@@ -2953,37 +2953,37 @@
 						"scope": "resource",
 						"description": "EXPERIMENTAL: The port where the daemon can be accessed if daemon is run remotely. This setting is intended for use by developers."
 					},
-					"dartx.previewCommitCharacters": {
+					"dartnative.previewCommitCharacters": {
 						"type": "boolean",
 						"default": false,
 						"description": "EXPERIMENTAL: Whether to enable commit characters for the LSP server. In a future release, the dart.enableCompletionCommitCharacters setting will also apply to LSP.",
 						"scope": "window"
 					},
-					"dartx.previewHotReloadOnSaveWatcher": {
+					"dartnative.previewHotReloadOnSaveWatcher": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Whether to perform hot reload on save based on a filesystem watcher for Dart files rather than using VS Code's `onDidSave` event. This allows reloads to trigger when external tools modify Dart source files.",
 						"scope": "window"
 					},
-					"dartx.experimentalRefactors": {
+					"dartnative.experimentalRefactors": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Whether to enable experimental (possibly unfinished or unstable) refactors on the lightbulb menu. This setting is intended for use by Dart Analysis Server developers or users that want to try out and provide feedback on in-progress refactors.",
 						"scope": "window"
 					},
-					"dartx.interactiveForms": {
+					"dartnative.interactiveForms": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to enable the Interactive Forms feature used for accepting user input during refactors.",
 						"scope": "window"
 					},
-					"dartx.dynamicTestTracking": {
+					"dartnative.dynamicTestTracking": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "Whether to use the new dynamic test tracking. This is a temporary setting that will be removed in an upcoming release.",
 						"scope": "window"
 					},
-					"dartx.experimentalDtdHandlers": {
+					"dartnative.experimentalDtdHandlers": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Whether to enable experimental (possibly unfinished or unstable) LSP handlers through DTD. This setting is passed to the analysis server in the connectToDtd request and therefore relies on DTD being supported and enabled for the analysis server (requires restart).",
@@ -2995,13 +2995,13 @@
 				"title": "Legacy",
 				"order": 4,
 				"properties": {
-					"dartx.lineLength": {
+					"dartnative.lineLength": {
 						"type": "integer",
 						"default": 80,
 						"markdownDescription": "**LEGACY SETTING: Use `formatter.page_width` in `analysis_options.yaml` instead.**\n\nThe maximum length of a line of code. This is used by the document formatter. If you change this value, you may wish to update `editor.rulers` (which draws vertical lines in the editor) in the `[\"dart\"]` section of your settings to match.",
 						"scope": "resource"
 					},
-					"dartx.onlyAnalyzeProjectsWithOpenFiles": {
+					"dartnative.onlyAnalyzeProjectsWithOpenFiles": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "**Deprecated**: Whether to ignore workspace folders and perform analysis based on the open files. This setting can make performance significantly worse when moving around a project and is not recommended.",

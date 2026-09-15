@@ -191,7 +191,7 @@ export let documentEol: string;
 
 function getDefaultFile(): vs.Uri {
 	// TODO: Web?
-	if (privateApi.workspaceContext.hasAnyFlutterProjects)
+	if (privateApi?.workspaceContext?.hasAnyFlutterProjects)
 		return flutterEmptyFile;
 	else
 		return emptyFile;
@@ -251,7 +251,9 @@ function setupTestLogging(): boolean {
 
 	privateApi = ext.exports[internalApiSymbol] as InternalExtensionApi;
 	extApi = ext.exports as PublicDartExtensionApi;
-	const emittingLogger = privateApi.logger;
+	const emittingLogger = privateApi?.logger;
+	if (!emittingLogger)
+		return false;
 
 	if (fileSafeCurrentTestName) {
 		const logFolder = process.env.DC_TEST_LOGS || path.join(ext.extensionPath, ".dart_code_test_logs");

@@ -36,7 +36,7 @@ This document catalogs all **VS Code Commands** and **Configuration Settings** c
 
 ### Renaming a Command
 - **Title / Display Label**: Modify the `"title"` or `"category"` in `package.json` under `contributes.commands`.
-- **Command Identifier**: If modifying the command ID string (e.g. `dart.xxx` $\to$ `dartx.xxx`), you must update:
+- **Command Identifier**: If modifying the command ID string (e.g. `dart.xxx` $\to$ `dartnative.xxx`), you must update:
   1. `package.json` (`contributes.commands`, `contributes.menus`, `contributes.keybindings`)
   2. The TypeScript registration file under `src/extension/commands/` (e.g. `vs.commands.registerCommand("dart.xxx", ...)`)
   3. Any internal calls referencing `vs.commands.executeCommand("dart.xxx", ...)`
@@ -67,8 +67,8 @@ This document catalogs all **VS Code Commands** and **Configuration Settings** c
 | `dart.createProject` | Create New Project | Conditional (`undefined`) | `src/extension/commands/dart.ts`, `src/extension/sdk/utils.ts` |
 | `dart.addSdkToPath` | Add Dart SDK to PATH | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/add_sdk_to_path.ts` |
 | `dart.writeRecommendedSettings` | Use Recommended Settings | Conditional (`dart-code:anyProjectLoaded`) | `src/extension/commands/edit.ts` |
-| `dart.addDependency` | Add Dependency | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/add_dependency.ts` |
-| `dart.addDevDependency` | Add Dev Dependency | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/add_dependency.ts` |
+| `dart.addDependency` | Add Dependency | Conditional (`dart-code:anyProjectLoaded && config.dartnative.enablePub`) | `src/extension/commands/add_dependency.ts` |
+| `dart.addDevDependency` | Add Dev Dependency | Conditional (`dart-code:anyProjectLoaded && config.dartnative.enablePub`) | `src/extension/commands/add_dependency.ts` |
 | `_dart.removeDependency` | Remove Dependency | **Hidden** (`when: false`) | `src/extension/commands/add_dependency.ts` |
 | `_dart.removeDependencyFromTreeNode` | Remove Dependency | **Hidden** (`when: false`) | `src/extension/views/packages_view.ts` |
 | `_dart.openDependencyPageFromTreeNode` | Open on pub.dev | Visible (Default) | `src/extension/views/packages_view.ts` |
@@ -130,11 +130,11 @@ This document catalogs all **VS Code Commands** and **Configuration Settings** c
 
 | Command ID | Title | Palette Status / When Condition | Registered In |
 | :--- | :--- | :--- | :--- |
-| `pub.get` | Get Packages | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
-| `pub.get.all` | Get Packages for All Projects | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
-| `pub.upgrade` | Upgrade Packages | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
-| `pub.upgrade.majorVersions` | Upgrade Packages (--major-versions) | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
-| `pub.outdated` | List Outdated Packages | Conditional (`dart-code:anyProjectLoaded && config.dartx.enablePub`) | `src/extension/commands/packages.ts` |
+| `pub.get` | Get Packages | Conditional (`dart-code:anyProjectLoaded && config.dartnative.enablePub`) | `src/extension/commands/packages.ts` |
+| `pub.get.all` | Get Packages for All Projects | Conditional (`dart-code:anyProjectLoaded && config.dartnative.enablePub`) | `src/extension/commands/packages.ts` |
+| `pub.upgrade` | Upgrade Packages | Conditional (`dart-code:anyProjectLoaded && config.dartnative.enablePub`) | `src/extension/commands/packages.ts` |
+| `pub.upgrade.majorVersions` | Upgrade Packages (--major-versions) | Conditional (`dart-code:anyProjectLoaded && config.dartnative.enablePub`) | `src/extension/commands/packages.ts` |
+| `pub.outdated` | List Outdated Packages | Conditional (`dart-code:anyProjectLoaded && config.dartnative.enablePub`) | `src/extension/commands/packages.ts` |
 
 ### Debug Commands
 
@@ -183,177 +183,177 @@ These commands are registered directly in TypeScript code but are not declared i
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.analysisExcludedFolders` | `array` | `[]` | An array of paths to be excluded from Dart analysis. This option should usually be set at the Workspace level. Excluded folders will also be ignored when detecting project types. |
-| `dartx.analyzerAdditionalArgs` | `array` | `[]` | Additional arguments to pass to the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
-| `dartx.analyzerVmAdditionalArgs` | `array` | `[]` | Additional arguments to pass to the VM running the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
-| `dartx.analyzerDiagnosticsPort` | `null \| number` | `null` | The port number to be used for the Dart analyzer diagnostic server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
-| `dartx.analyzerPath` | `null \| string` | `null` | The path to a custom Dart Analysis Server. This setting is intended for use by Dart Analysis Server developers. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
-| `dartx.analyzerSshHost` | `null \| string` | `null` | An SSH host to run the Analysis Server. This can be useful when modifying code on a remote machine using SSHFS. |
-| `dartx.analyzerVmServicePort` | `null \| number` | `null` | The port number to be used for the Dart Analysis Server VM service. This setting is intended for use by Dart Analysis Server developers. |
-| `dartx.includeDependenciesInWorkspaceSymbols` | `boolean` | `true` | Whether to include symbols from the SDK and package dependencies in the "Go to Symbol in Workspace" (`cmd/ctrl`+`T`) list. This can only be disabled when using Dart 3.0 or later. |
-| `dartx.notifyAnalyzerErrors` | `boolean` | `true` | Whether to show a notification the first few times an Analysis Server exception occurs. |
-| `dartx.showTodos` | `boolean \| array` | `true` | Whether to show TODOs in the Problems list. Can be a boolean to enable all TODO comments (TODO, FIXME, HACK, UNDONE) or an array of which types to enable. Older Dart SDKs may not support some TODO kinds. |
-| `dartx.showExtensionRecommendations` | `boolean` | `true` | Whether to show recommendations for other VS Code extensions based on the packages you're using. |
+| `dartnative.analysisExcludedFolders` | `array` | `[]` | An array of paths to be excluded from Dart analysis. This option should usually be set at the Workspace level. Excluded folders will also be ignored when detecting project types. |
+| `dartnative.analyzerAdditionalArgs` | `array` | `[]` | Additional arguments to pass to the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
+| `dartnative.analyzerVmAdditionalArgs` | `array` | `[]` | Additional arguments to pass to the VM running the Dart Analysis Server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
+| `dartnative.analyzerDiagnosticsPort` | `null \| number` | `null` | The port number to be used for the Dart analyzer diagnostic server. This setting is can be useful for troubleshooting issues with the Dart Analysis Server. |
+| `dartnative.analyzerPath` | `null \| string` | `null` | The path to a custom Dart Analysis Server. This setting is intended for use by Dart Analysis Server developers. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
+| `dartnative.analyzerSshHost` | `null \| string` | `null` | An SSH host to run the Analysis Server. This can be useful when modifying code on a remote machine using SSHFS. |
+| `dartnative.analyzerVmServicePort` | `null \| number` | `null` | The port number to be used for the Dart Analysis Server VM service. This setting is intended for use by Dart Analysis Server developers. |
+| `dartnative.includeDependenciesInWorkspaceSymbols` | `boolean` | `true` | Whether to include symbols from the SDK and package dependencies in the "Go to Symbol in Workspace" (`cmd/ctrl`+`T`) list. This can only be disabled when using Dart 3.0 or later. |
+| `dartnative.notifyAnalyzerErrors` | `boolean` | `true` | Whether to show a notification the first few times an Analysis Server exception occurs. |
+| `dartnative.showTodos` | `boolean \| array` | `true` | Whether to show TODOs in the Problems list. Can be a boolean to enable all TODO comments (TODO, FIXME, HACK, UNDONE) or an array of which types to enable. Older Dart SDKs may not support some TODO kinds. |
+| `dartnative.showExtensionRecommendations` | `boolean` | `true` | Whether to show recommendations for other VS Code extensions based on the packages you're using. |
 
 ### DevTools Settings (8)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.devToolsBrowser` | `enum` | `"chrome"` | Whether to launch external DevTools windows using Chrome or the system default browser. This setting is ignored for remote workspaces (including Docker, SSH, WSL). |
-| `dartx.devToolsPort` | `null \| number` | `null` | The port number to be used for the Dart DevTools (requires restart). |
-| `dartx.devToolsReuseWindows` | `boolean` | `true` | Whether to try to reuse existing DevTools windows instead of launching new ones. Only works for instances of DevTools launched by the DevTools server on the local machine. |
-| `dartx.devToolsTheme` | `enum` | `"dark"` | The theme to use for Dart DevTools. |
-| `dartx.devToolsLocation` | `object` | `{"default":"beside","inspec...` | Where to open [Dart DevTools](https://dart.dev/tools/dart-devtools) pages. |
-| `dartx.openDevTools` | `enum` | `"never"` | Whether to automatically open DevTools at the start of a debug session. |
-| `dartx.closeDevTools` | `enum` | `"never"` | Whether to automatically close embedded DevTools tabs when a debug session ends. |
-| `dartx.customDevTools` | `object` | `—` | Custom settings for launching DevTools. This setting is intended for use by Dart DevTools developers. |
+| `dartnative.devToolsBrowser` | `enum` | `"chrome"` | Whether to launch external DevTools windows using Chrome or the system default browser. This setting is ignored for remote workspaces (including Docker, SSH, WSL). |
+| `dartnative.devToolsPort` | `null \| number` | `null` | The port number to be used for the Dart DevTools (requires restart). |
+| `dartnative.devToolsReuseWindows` | `boolean` | `true` | Whether to try to reuse existing DevTools windows instead of launching new ones. Only works for instances of DevTools launched by the DevTools server on the local machine. |
+| `dartnative.devToolsTheme` | `enum` | `"dark"` | The theme to use for Dart DevTools. |
+| `dartnative.devToolsLocation` | `object` | `{"default":"beside","inspec...` | Where to open [Dart DevTools](https://dart.dev/tools/dart-devtools) pages. |
+| `dartnative.openDevTools` | `enum` | `"never"` | Whether to automatically open DevTools at the start of a debug session. |
+| `dartnative.closeDevTools` | `enum` | `"never"` | Whether to automatically close embedded DevTools tabs when a debug session ends. |
+| `dartnative.customDevTools` | `object` | `—` | Custom settings for launching DevTools. This setting is intended for use by Dart DevTools developers. |
 
 ### Editor Settings (23)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.autoImportCompletions` | `boolean` | `true` | Whether to include symbols that have not been imported in the code completion list and automatically insert the required import when selecting them (requires restart). |
-| `dartx.automaticCommentSlashes` | `enum` | `"tripleSlash"` | Determines when to insert comment slashes when pressing `<enter>` in the editor (requires restart).  When using `tripleSlash`, double-slashes will still be included when breaking existing double-slash comments across additional lines. |
-| `dartx.closingLabels` | `boolean` | `true` | Whether to show annotations against constructor, method invocations and lists that span multiple lines. |
-| `dartx.closingLabelsPrefix` | `string` | `" // "` | The prefix to use in closing labels. |
-| `dartx.closingLabelsTextStyle` | `string` | `"normal"` | The text style to use in closing labels. Using _Italic_ requires a font that supports italic text. |
-| `dartx.completeFunctionCalls` | `boolean` | `true` | Whether to insert parentheses and placeholders for positional and required arguments during code completions when using LSP. This feature is automatically disabled if commit characters are enabled. |
-| `dartx.documentation` | `null \| string` | `—` | What level of documentation to show in Hovers and Code Completion details. When `null`, defaults to 'full' when running locally and 'none' in remote workspaces. This setting is only supported for Dart SDKs after v2.18. |
-| `dartx.dtdEditorActiveLocationDelay` | `integer` | `200` | How long (in ms) to delay sending editor location change events over the Dart Tooling Daemon. Increasing this results in less events which may improve performance, at the expensive of tools that use these events not updating as quickly after your location/editor changes (requires restart). |
-| `dartx.enableServerSnippets` | `boolean` | `true` | Whether to use code snippets from the Dart Analysis Server instead of those included in the extension. Server snippets are context and language-version aware and should be preferred. |
-| `dartx.hotReloadPatterns` | `array` | `[]` | An array of glob patterns that should trigger Hot Reload when saved. The pattern is matched against the absolute path of the file. Use `**/assets/**` to trigger reloading for everything in the assets directory. Must always start with "**/" and use forward slashes (even on Windows) as backslashes are used for escaping. |
-| `dartx.enableCompletionCommitCharacters` | `boolean` | `false` | Whether to automatically commit the selected completion item when pressing certain keys such as . , ( and \[. This setting does not currently apply to LSP, see `#dartx.previewCommitCharacters#`. |
-| `dartx.enableSdkFormatter` | `boolean` | `true` | Whether to enable the [dart_style](https://pub.dev/packages/dart_style) formatter for Dart code. |
-| `dartx.enableSnippets` | `boolean` | `true` | Whether to include Dart and DartNative snippets in code completion. |
-| `dartx.inlayHints` | `boolean \| object` | `true` | Whether to show Inlay Hints. When set to `true`, enables all inlay hints with default settings. When set to `false`, disables all inlay hints. Can also be an object to configure individual hint types. Requires Dart 3.10. |
-| `dartx.insertArgumentPlaceholders` | `boolean` | `true` | Whether to insert argument placeholders during code completions. This feature is automatically disabled when `enableCompletionCommitCharacters` is enabled. |
-| `dartx.lspSnippetTextEdits` | `boolean` | `true` | Whether to enable [Snippet support in LSP TextEdits](https://github.com/rust-analyzer/rust-analyzer/blob/979e788957ced1957ee9ac1da70fb97abf9fe2b1/docs/dev/lsp-extensions.md#snippet-textedit). |
-| `dartx.renameFilesWithClasses` | `enum` | `"never"` | Whether to rename files when renaming classes with matching names (for example renaming 'class Person' inside 'person.dart'). If set to 'prompt', will ask each time before renaming. If set to 'always', the file will automatically be renamed. This setting requires using LSP and a Dart SDK of at least v2.15. |
-| `dartx.showDartPadSampleCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for opening online DartPad samples. |
-| `dartx.showMainCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for quick running / debugging scripts with main functions. |
-| `dartx.showTestCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for quick running / debugging tests. |
-| `dartx.updateImportsOnRename` | `boolean` | `true` | Whether to automatically update imports when moving or renaming files. Currently only supports single file moves / renames. |
-| `dartx.warnWhenEditingFilesOutsideWorkspace` | `boolean` | `true` | Whether to show a warning when modifying files outside of the workspace. |
-| `dartx.warnWhenEditingFilesInPubCache` | `boolean` | `true` | Whether to show a warning when modifying files in the [system package cache](https://dart.dev/tools/pub/glossary#system-cache) directory. |
+| `dartnative.autoImportCompletions` | `boolean` | `true` | Whether to include symbols that have not been imported in the code completion list and automatically insert the required import when selecting them (requires restart). |
+| `dartnative.automaticCommentSlashes` | `enum` | `"tripleSlash"` | Determines when to insert comment slashes when pressing `<enter>` in the editor (requires restart).  When using `tripleSlash`, double-slashes will still be included when breaking existing double-slash comments across additional lines. |
+| `dartnative.closingLabels` | `boolean` | `true` | Whether to show annotations against constructor, method invocations and lists that span multiple lines. |
+| `dartnative.closingLabelsPrefix` | `string` | `" // "` | The prefix to use in closing labels. |
+| `dartnative.closingLabelsTextStyle` | `string` | `"normal"` | The text style to use in closing labels. Using _Italic_ requires a font that supports italic text. |
+| `dartnative.completeFunctionCalls` | `boolean` | `true` | Whether to insert parentheses and placeholders for positional and required arguments during code completions when using LSP. This feature is automatically disabled if commit characters are enabled. |
+| `dartnative.documentation` | `null \| string` | `—` | What level of documentation to show in Hovers and Code Completion details. When `null`, defaults to 'full' when running locally and 'none' in remote workspaces. This setting is only supported for Dart SDKs after v2.18. |
+| `dartnative.dtdEditorActiveLocationDelay` | `integer` | `200` | How long (in ms) to delay sending editor location change events over the Dart Tooling Daemon. Increasing this results in less events which may improve performance, at the expensive of tools that use these events not updating as quickly after your location/editor changes (requires restart). |
+| `dartnative.enableServerSnippets` | `boolean` | `true` | Whether to use code snippets from the Dart Analysis Server instead of those included in the extension. Server snippets are context and language-version aware and should be preferred. |
+| `dartnative.hotReloadPatterns` | `array` | `[]` | An array of glob patterns that should trigger Hot Reload when saved. The pattern is matched against the absolute path of the file. Use `**/assets/**` to trigger reloading for everything in the assets directory. Must always start with "**/" and use forward slashes (even on Windows) as backslashes are used for escaping. |
+| `dartnative.enableCompletionCommitCharacters` | `boolean` | `false` | Whether to automatically commit the selected completion item when pressing certain keys such as . , ( and \[. This setting does not currently apply to LSP, see `#dartnative.previewCommitCharacters#`. |
+| `dartnative.enableSdkFormatter` | `boolean` | `true` | Whether to enable the [dart_style](https://pub.dev/packages/dart_style) formatter for Dart code. |
+| `dartnative.enableSnippets` | `boolean` | `true` | Whether to include Dart and DartNative snippets in code completion. |
+| `dartnative.inlayHints` | `boolean \| object` | `true` | Whether to show Inlay Hints. When set to `true`, enables all inlay hints with default settings. When set to `false`, disables all inlay hints. Can also be an object to configure individual hint types. Requires Dart 3.10. |
+| `dartnative.insertArgumentPlaceholders` | `boolean` | `true` | Whether to insert argument placeholders during code completions. This feature is automatically disabled when `enableCompletionCommitCharacters` is enabled. |
+| `dartnative.lspSnippetTextEdits` | `boolean` | `true` | Whether to enable [Snippet support in LSP TextEdits](https://github.com/rust-analyzer/rust-analyzer/blob/979e788957ced1957ee9ac1da70fb97abf9fe2b1/docs/dev/lsp-extensions.md#snippet-textedit). |
+| `dartnative.renameFilesWithClasses` | `enum` | `"never"` | Whether to rename files when renaming classes with matching names (for example renaming 'class Person' inside 'person.dart'). If set to 'prompt', will ask each time before renaming. If set to 'always', the file will automatically be renamed. This setting requires using LSP and a Dart SDK of at least v2.15. |
+| `dartnative.showDartPadSampleCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for opening online DartPad samples. |
+| `dartnative.showMainCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for quick running / debugging scripts with main functions. |
+| `dartnative.showTestCodeLens` | `boolean` | `true` | Whether to show CodeLens actions in the editor for quick running / debugging tests. |
+| `dartnative.updateImportsOnRename` | `boolean` | `true` | Whether to automatically update imports when moving or renaming files. Currently only supports single file moves / renames. |
+| `dartnative.warnWhenEditingFilesOutsideWorkspace` | `boolean` | `true` | Whether to show a warning when modifying files outside of the workspace. |
+| `dartnative.warnWhenEditingFilesInPubCache` | `boolean` | `true` | Whether to show a warning when modifying files in the [system package cache](https://dart.dev/tools/pub/glossary#system-cache) directory. |
 
 ### DartNative Settings (17)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.offline` | `boolean` | `false` | Whether to use the --offline switch for commands like 'pub get' and 'DartNative: Create New Project'. |
-| `dartx.hotReloadOnSave` | `enum` | `"never"` | Whether to automatically send a Hot Reload request to Dart apps during a debug session when saving files. DartNative apps are controlled by the dartNativeHotReloadOnSave setting. |
-| `dartx.enableWidgetRefactors` | `boolean` | `true` | Whether to enable built-in DartX widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin. |
-| `dartx.formatAfterSnippet` | `boolean` | `true` | Whether to automatically format the document after inserting widget snippets (such as `stless` and `stful`). |
-| `dartx.formatAfterRefactoring` | `boolean` | `true` | Whether to automatically format the document after applying refactorings (such as Extract Widget, Wrap with Widget, and state conversions). |
-| `dartx.moveNonFinalFieldsToState` | `boolean` | `true` | When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers. |
-| `dartx.dartNativeAdditionalArgs` | `array` | `[]` | Additional arguments to pass to `dartnative` commands, including the daemon. Arguments are passed directly to `dn`. |
-| `dartx.dartNativeCreatePlatforms` | `array` | `["android","ios"]` | The platforms to enable for new projects created using the 'DartNative: Create New Project' command. Only 'android' and 'ios' are supported for DartNative. |
-| `dartx.dartNativeCreatePromptForPlatforms` | `boolean` | `true` | Whether to prompt for platforms when running 'DartNative: Create New Project'. |
-| `dartx.dartNativeGutterIcons` | `boolean` | `true` | Whether to show DartNative icons and colors in the editor gutter. |
-| `dartx.dartNativeHotReloadOnSave` | `enum` | `"manual"` | Whether to automatically send a Hot Reload request to DartNative apps during a debug session when saving files. Dart apps are controlled by the hotReloadOnSave setting. |
-| `dartx.dartNativeRememberSelectedDevice` | `boolean` | `true` | Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dartx.dartNativeSelectDeviceWhenConnected#` setting). |
-| `dartx.dartNativeRunAdditionalArgs` | `array` | `[]` | Additional arguments to pass when running `dartnative` applications in debug or run mode. Arguments are passed directly to `dn run`. |
-| `dartx.dartNativeScreenshotPath` | `null \| string` | `null` | The path to a directory to save DartNative screenshots. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
-| `dartx.dartNativeSelectDeviceWhenConnected` | `boolean` | `true` | Whether to set newly connected devices as the current device in DartNative projects. |
-| `dartx.dartNativeShowEmulators` | `enum` | `"local"` | When to show DartNative emulators. These are usually hidden for remote workspaces because it is usually not possible to see or interact with emulators in a remote session. If you are using remoting/containers in a way that you can interact with launched emulator processes, you may wish to set this to 'always'. |
-| `dartx.dartNativeTestAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dartnative test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
+| `dartnative.offline` | `boolean` | `false` | Whether to use the --offline switch for commands like 'pub get' and 'DartNative: Create New Project'. |
+| `dartnative.hotReloadOnSave` | `enum` | `"never"` | Whether to automatically send a Hot Reload request to Dart apps during a debug session when saving files. DartNative apps are controlled by the dartNativeHotReloadOnSave setting. |
+| `dartnative.enableWidgetRefactors` | `boolean` | `true` | Whether to enable built-in DartNative widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin. |
+| `dartnative.formatAfterSnippet` | `boolean` | `true` | Whether to automatically format the document after inserting widget snippets (such as `stless` and `stful`). |
+| `dartnative.formatAfterRefactoring` | `boolean` | `true` | Whether to automatically format the document after applying refactorings (such as Extract Widget, Wrap with Widget, and state conversions). |
+| `dartnative.moveNonFinalFieldsToState` | `boolean` | `true` | When converting between StatefulWidget and StatelessWidget, whether to automatically move non-final/mutable fields to the State class and adjust constructor 'const' modifiers. |
+| `dartnative.dartNativeAdditionalArgs` | `array` | `[]` | Additional arguments to pass to `dartnative` commands, including the daemon. Arguments are passed directly to `dn`. |
+| `dartnative.dartNativeCreatePlatforms` | `array` | `["android","ios"]` | The platforms to enable for new projects created using the 'DartNative: Create New Project' command. Only 'android' and 'ios' are supported for DartNative. |
+| `dartnative.dartNativeCreatePromptForPlatforms` | `boolean` | `true` | Whether to prompt for platforms when running 'DartNative: Create New Project'. |
+| `dartnative.dartNativeGutterIcons` | `boolean` | `true` | Whether to show DartNative icons and colors in the editor gutter. |
+| `dartnative.dartNativeHotReloadOnSave` | `enum` | `"manual"` | Whether to automatically send a Hot Reload request to DartNative apps during a debug session when saving files. Dart apps are controlled by the hotReloadOnSave setting. |
+| `dartnative.dartNativeRememberSelectedDevice` | `boolean` | `true` | Whether to remember which device was last (explicitly) selected for each project. When the remembered device is selected, it will prevent newly-connected mobile devices from being automatically selected (regardless of the `#dartnative.dartNativeSelectDeviceWhenConnected#` setting). |
+| `dartnative.dartNativeRunAdditionalArgs` | `array` | `[]` | Additional arguments to pass when running `dartnative` applications in debug or run mode. Arguments are passed directly to `dn run`. |
+| `dartnative.dartNativeScreenshotPath` | `null \| string` | `null` | The path to a directory to save DartNative screenshots. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
+| `dartnative.dartNativeSelectDeviceWhenConnected` | `boolean` | `true` | Whether to set newly connected devices as the current device in DartNative projects. |
+| `dartnative.dartNativeShowEmulators` | `enum` | `"local"` | When to show DartNative emulators. These are usually hidden for remote workspaces because it is usually not possible to see or interact with emulators in a remote session. If you are using remoting/containers in a way that you can interact with launched emulator processes, you may wish to set this to 'always'. |
+| `dartnative.dartNativeTestAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dartnative test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
 
 ### Logging Settings (10)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.analyzerInstrumentationLogFile` | `null \| string` | `null` | The path to a log file for very detailed logging in the Dart Analysis Server that may be useful when trying to diagnose Analysis Server issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
-| `dartx.analyzerLogFile` | `null \| string` | `null` | The path to a log file for communication between Dart Code and the Analysis Server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
-| `dartx.toolingDaemonLogFile` | `null \| string` | `null` | The path to a log file for the `dart tooling-daemon` service, which coordinates between various Dart and DartNative tools and extensions. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
-| `dartx.dapLogFile` | `null \| string` | `null` | The path to a log file for communication with the DAP debug adapters. This is useful when trying to diagnose issues with debugging such as missed breakpoints. Use `${name}` in the log file name to insert the Debug Session name to prevent concurrent debug sessions overwriting each others logs. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `${kind}` to insert a description of the kind of debug session ('dart', 'dart_test', 'dartnative' etc.). Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
-| `dartx.devToolsLogFile` | `null \| string` | `null` | The path to a low-traffic log file for the Dart DevTools service. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
-| `dartx.extensionLogFile` | `null \| string` | `null` | The path to a low-traffic log file for basic extension and editor issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
-| `dartx.mcpServerLogFile` | `null \| string` | `null` | The path to a log file for the Dart SDK's MCP server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
-| `dartx.maxLogLineLength` | `number` | `2000` | The maximum length of a line in the log file. Lines longer than this will be truncated and suffixed with an ellipsis. |
-| `dartx.maxCompletionItems` | `null \| number` | `—` | The maximum number of completion items to return from a code completion request. Updated results will be fetched as additional characters are typed. Lower numbers may improved performance. Defaults to a lower value in remote workspaces. Only affects LSP for > Dart SDK 2.17. |
-| `dartx.dartNativeDaemonLogFile` | `null \| string` | `null` | The path to a log file for the `dartnative daemon` service, which provides information about connected devices accessible from the status bar. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.analyzerInstrumentationLogFile` | `null \| string` | `null` | The path to a log file for very detailed logging in the Dart Analysis Server that may be useful when trying to diagnose Analysis Server issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.analyzerLogFile` | `null \| string` | `null` | The path to a log file for communication between Dart Code and the Analysis Server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.toolingDaemonLogFile` | `null \| string` | `null` | The path to a log file for the `dart tooling-daemon` service, which coordinates between various Dart and DartNative tools and extensions. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.dapLogFile` | `null \| string` | `null` | The path to a log file for communication with the DAP debug adapters. This is useful when trying to diagnose issues with debugging such as missed breakpoints. Use `${name}` in the log file name to insert the Debug Session name to prevent concurrent debug sessions overwriting each others logs. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `${kind}` to insert a description of the kind of debug session ('dart', 'dart_test', 'dartnative' etc.). Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.devToolsLogFile` | `null \| string` | `null` | The path to a low-traffic log file for the Dart DevTools service. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.extensionLogFile` | `null \| string` | `null` | The path to a low-traffic log file for basic extension and editor issues. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.mcpServerLogFile` | `null \| string` | `null` | The path to a log file for the Dart SDK's MCP server. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
+| `dartnative.maxLogLineLength` | `number` | `2000` | The maximum length of a line in the log file. Lines longer than this will be truncated and suffixed with an ellipsis. |
+| `dartnative.maxCompletionItems` | `null \| number` | `—` | The maximum number of completion items to return from a code completion request. Updated results will be fetched as additional characters are typed. Lower numbers may improved performance. Defaults to a lower value in remote workspaces. Only affects LSP for > Dart SDK 2.17. |
+| `dartnative.dartNativeDaemonLogFile` | `null \| string` | `null` | The path to a log file for the `dartnative daemon` service, which provides information about connected devices accessible from the status bar. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is. |
 
 ### Pub Settings (6)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.enablePub` | `boolean` | `true` | Whether to enable functionality for using Pub. Turning this setting off will prevent the extension from ever running pub and hide all commands relating to this. Use this if you are using an alternative package manager. |
-| `dartx.promptToGetPackages` | `boolean` | `true` | Whether to prompt to get/upgrade packages when opening a project with missing/out of date packages. |
-| `dartx.pubAdditionalArgs` | `array` | `[]` | Additional args to pass to all `pub` commands (such as `dn pub get`, `flutter pub get`, or `dart pub get`). |
-| `dartx.runPubGetOnPubspecChanges` | `enum` | `"always"` | Whether to run `pub get` whenever `pubspec.yaml` is saved. |
-| `dartx.runPubGetOnNestedProjects` | `enum` | `"none"` | Whether to automatically run `pub get` on nested projects above or below the one where the pubspec was changed. |
-| `dartx.runPubConcurrently` | `boolean` | `true` | Whether to run Pub operations across multiple folders concurrently. |
+| `dartnative.enablePub` | `boolean` | `true` | Whether to enable functionality for using Pub. Turning this setting off will prevent the extension from ever running pub and hide all commands relating to this. Use this if you are using an alternative package manager. |
+| `dartnative.promptToGetPackages` | `boolean` | `true` | Whether to prompt to get/upgrade packages when opening a project with missing/out of date packages. |
+| `dartnative.pubAdditionalArgs` | `array` | `[]` | Additional args to pass to all `pub` commands (such as `dn pub get`, `flutter pub get`, or `dart pub get`). |
+| `dartnative.runPubGetOnPubspecChanges` | `enum` | `"always"` | Whether to run `pub get` whenever `pubspec.yaml` is saved. |
+| `dartnative.runPubGetOnNestedProjects` | `enum` | `"none"` | Whether to automatically run `pub get` on nested projects above or below the one where the pubspec was changed. |
+| `dartnative.runPubConcurrently` | `boolean` | `true` | Whether to run Pub operations across multiple folders concurrently. |
 
 ### Run and Debug Settings (18)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.buildRunnerAdditionalArgs` | `array` | `[]` | Additional args to pass to the `build_runner` when building/watching/serving. |
-| `dartx.cliConsole` | `enum` | `"debugConsole"` | Whether to run Dart CLI apps in the Debug Console or a terminal. The Debug Console has more functionality because the process is controlled by the debug adapter, but is unable to accept input from the user via stdin. |
-| `dartx.debugExtensionBackendProtocol` | `enum` | `"ws"` | The protocol to use for the Dart Debug Extension backend service and injected client. Using WebSockets can improve performance but may fail when connecting through some proxy servers. |
-| `dartx.debugSdkLibraries` | `boolean` | `false` | Whether to mark Dart SDK libraries (`dart:*`) as debuggable, enabling stepping into them while debugging. |
-| `dartx.debugExternalPackageLibraries` | `boolean` | `false` | Whether to mark external pub package libraries (including `package:dartnative`) as debuggable, enabling stepping into them while debugging. |
-| `dartx.evaluateGettersInDebugViews` | `boolean` | `true` | Whether to evaluate getters in order to display them in debug views (such as the Variables, Watch and Hovers views). |
-| `dartx.showGettersInDebugViews` | `boolean` | `true` | Whether to show getters in order to display them in debug views (such as the Variables, Watch and Hovers views). If `evaluateGettersInDebugViews` is `true` getters will be eagerly evaluated, otherwise they will require clicking to evaluate. |
-| `dartx.evaluateToStringInDebugViews` | `boolean` | `true` | Whether to call toString() on objects when rendering them in debug views (such as the Variables, Watch and Hovers views). Only applies to views of 100 or fewer values for performance reasons. |
-| `dartx.hotReloadProgress` | `enum` | `"notification"` | Determines how to display Hot Restart and Hot Reload progress. |
-| `dartx.promptToRunIfErrors` | `boolean` | `true` | Whether to prompt before running if there are errors in your project. Test scripts will be excluded from the check unless they're the script being run. |
-| `dartx.showDartDeveloperLogs` | `boolean` | `true` | Whether to show logs from the `dart:developer` `log()` function in the debug console. |
-| `dartx.showDebuggerNumbersAsHex` | `boolean` | `false` | Whether to show integers formatted as Hex in Variables, Watch, Debug Consoles. |
-| `dartx.showDevToolsDebugToolBarButtons` | `boolean` | `true` | Whether to show DevTools buttons in the floating Debug toolbar. |
-| `dartx.suppressTestTimeouts` | `enum` | `"debug"` | Whether to suppress test timeouts when running/debugging tests. To work properly this requires package:test version 1.20.1 or newer. For older versions, the default timeout will be increased to 1d but this will not affect tests that have explicit (non-factor) timeouts set with @timeout. |
-| `dartx.cliAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart` command when running CLI scripts. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
-| `dartx.testAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
-| `dartx.vmAdditionalArgs` | `array` | `[]` | Arguments to be passed to the Dart VM when running Dart CLI scripts/tests.  These arguments appear after "dart" but before subcommands like "test":  `dart (vmAdditionalArgs) test (toolArgs) test/my_test.dart (args)` |
-| `dartx.customDartDapPath` | `null \| string` | `null` | The path to a custom Dart Debug Adapter. This setting is intended for use by Dart Debug Adapter developers. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
+| `dartnative.buildRunnerAdditionalArgs` | `array` | `[]` | Additional args to pass to the `build_runner` when building/watching/serving. |
+| `dartnative.cliConsole` | `enum` | `"debugConsole"` | Whether to run Dart CLI apps in the Debug Console or a terminal. The Debug Console has more functionality because the process is controlled by the debug adapter, but is unable to accept input from the user via stdin. |
+| `dartnative.debugExtensionBackendProtocol` | `enum` | `"ws"` | The protocol to use for the Dart Debug Extension backend service and injected client. Using WebSockets can improve performance but may fail when connecting through some proxy servers. |
+| `dartnative.debugSdkLibraries` | `boolean` | `false` | Whether to mark Dart SDK libraries (`dart:*`) as debuggable, enabling stepping into them while debugging. |
+| `dartnative.debugExternalPackageLibraries` | `boolean` | `false` | Whether to mark external pub package libraries (including `package:dartnative`) as debuggable, enabling stepping into them while debugging. |
+| `dartnative.evaluateGettersInDebugViews` | `boolean` | `true` | Whether to evaluate getters in order to display them in debug views (such as the Variables, Watch and Hovers views). |
+| `dartnative.showGettersInDebugViews` | `boolean` | `true` | Whether to show getters in order to display them in debug views (such as the Variables, Watch and Hovers views). If `evaluateGettersInDebugViews` is `true` getters will be eagerly evaluated, otherwise they will require clicking to evaluate. |
+| `dartnative.evaluateToStringInDebugViews` | `boolean` | `true` | Whether to call toString() on objects when rendering them in debug views (such as the Variables, Watch and Hovers views). Only applies to views of 100 or fewer values for performance reasons. |
+| `dartnative.hotReloadProgress` | `enum` | `"notification"` | Determines how to display Hot Restart and Hot Reload progress. |
+| `dartnative.promptToRunIfErrors` | `boolean` | `true` | Whether to prompt before running if there are errors in your project. Test scripts will be excluded from the check unless they're the script being run. |
+| `dartnative.showDartDeveloperLogs` | `boolean` | `true` | Whether to show logs from the `dart:developer` `log()` function in the debug console. |
+| `dartnative.showDebuggerNumbersAsHex` | `boolean` | `false` | Whether to show integers formatted as Hex in Variables, Watch, Debug Consoles. |
+| `dartnative.showDevToolsDebugToolBarButtons` | `boolean` | `true` | Whether to show DevTools buttons in the floating Debug toolbar. |
+| `dartnative.suppressTestTimeouts` | `enum` | `"debug"` | Whether to suppress test timeouts when running/debugging tests. To work properly this requires package:test version 1.20.1 or newer. For older versions, the default timeout will be increased to 1d but this will not affect tests that have explicit (non-factor) timeouts set with @timeout. |
+| `dartnative.cliAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart` command when running CLI scripts. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
+| `dartnative.testAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart test` command. Using the `args`/`toolArgs` fields in `launch.json` is usually better than this setting as this setting will apply to _all_ projects. |
+| `dartnative.vmAdditionalArgs` | `array` | `[]` | Arguments to be passed to the Dart VM when running Dart CLI scripts/tests.  These arguments appear after "dart" but before subcommands like "test":  `dart (vmAdditionalArgs) test (toolArgs) test/my_test.dart (args)` |
+| `dartnative.customDartDapPath` | `null \| string` | `null` | The path to a custom Dart Debug Adapter. This setting is intended for use by Dart Debug Adapter developers. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
 
 ### SDK Settings (7)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.checkForSdkUpdates` | `boolean` | `true` | Whether to check you are using the latest version of the Dart SDK at startup. |
-| `dartx.sdkSwitchingTarget` | `enum` | `"workspace"` | Where to save SDK selections when using fast SDK switching from the language status entry. |
-| `dartx.addSdkToTerminalPath` | `boolean` | `true` | Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartx..dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart). |
-| `dartx.mcpServer` | `boolean` | `true` | Whether to register the Dart SDK's MCP server with VS Code. This only applies to Dart SDKs >= v3.9.0 which added the server. |
-| `dartx.mcpServerTools` | `object` | `{"analyze_files":false,"dar...` | A map of MCP tool names to booleans to enable/disable specific tools from the Dart MCP server. Tools set to `false` will be excluded (if supported). By default, tools that overlap with built-in VS Code functionality will be excluded. |
-| `dartx.dartNativeSdkPath` | `null \| string` | `null` | The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
-| `dartx.dartNativeSdkPaths` | `array` | `[]` | An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and runtime are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
+| `dartnative.checkForSdkUpdates` | `boolean` | `true` | Whether to check you are using the latest version of the Dart SDK at startup. |
+| `dartnative.sdkSwitchingTarget` | `enum` | `"workspace"` | Where to save SDK selections when using fast SDK switching from the language status entry. |
+| `dartnative.addSdkToTerminalPath` | `boolean` | `true` | Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartnative..dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart). |
+| `dartnative.mcpServer` | `boolean` | `true` | Whether to register the Dart SDK's MCP server with VS Code. This only applies to Dart SDKs >= v3.9.0 which added the server. |
+| `dartnative.mcpServerTools` | `object` | `{"analyze_files":false,"dar...` | A map of MCP tool names to booleans to enable/disable specific tools from the Dart MCP server. Tools set to `false` will be excluded (if supported). By default, tools that overlap with built-in VS Code functionality will be excluded. |
+| `dartnative.dartNativeSdkPath` | `null \| string` | `null` | The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartNative will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
+| `dartnative.dartNativeSdkPaths` | `array` | `[]` | An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and runtime are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
 
 ### Testing Settings (5)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.allowTestsOutsideTestFolder` | `boolean` | `false` | Whether to consider files ending `_test.dart` that are outside of the test directory as tests. This should be enabled if you put tests inside the `lib` directory of your DartNative app so they will be run with test commands. |
-| `dartx.coverageExcludePatterns` | `array` | `[]` | An array of glob patterns to exclude from code coverage results. Paths matching any of these patterns will still be collected by the Dart VM but not be included in coverage reported to VS Code. |
-| `dartx.openTestView` | `array` | `["testRunStart"]` | When to automatically switch focus to the test list (array to support multiple values). |
-| `dartx.showSkippedTests` | `boolean` | `true` | Whether to show skipped tests in the test tree. |
-| `dartx.testInvocationMode` | `enum` | `"name"` | How to identify tests when running/debugging. `name` is compatible with older versions of `package:test` but cannot handle some complex/dynamic test names. `line` will prefer to run tests by their line numbers (when available) and fall back to `name` only if the line number is unavailable. |
+| `dartnative.allowTestsOutsideTestFolder` | `boolean` | `false` | Whether to consider files ending `_test.dart` that are outside of the test directory as tests. This should be enabled if you put tests inside the `lib` directory of your DartNative app so they will be run with test commands. |
+| `dartnative.coverageExcludePatterns` | `array` | `[]` | An array of glob patterns to exclude from code coverage results. Paths matching any of these patterns will still be collected by the Dart VM but not be included in coverage reported to VS Code. |
+| `dartnative.openTestView` | `array` | `["testRunStart"]` | When to automatically switch focus to the test list (array to support multiple values). |
+| `dartnative.showSkippedTests` | `boolean` | `true` | Whether to show skipped tests in the test tree. |
+| `dartnative.testInvocationMode` | `enum` | `"name"` | How to identify tests when running/debugging. `name` is compatible with older versions of `package:test` but cannot handle some complex/dynamic test names. `line` will prefer to run tests by their line numbers (when available) and fall back to `name` only if the line number is unavailable. |
 
 ### Other Settings (3)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.projectSearchDepth` | `number` | `5` | How many levels (including the workspace roots) down the workspace to search for Dart/DartNative projects. Increasing this number may help detect DartNative projects that are deeply nested in your workspace but slow down all operations that search for projects, including extension activation (requires restart). |
-| `dartx.env` | `object` | `{}` | Additional environment variables to be added to all Dart/DartNative processes spawned by the DartX extension. |
-| `dartx.toolingDaemonAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart tooling-daemon` command that runs as a background service (requires restart). |
+| `dartnative.projectSearchDepth` | `number` | `5` | How many levels (including the workspace roots) down the workspace to search for Dart/DartNative projects. Increasing this number may help detect DartNative projects that are deeply nested in your workspace but slow down all operations that search for projects, including extension activation (requires restart). |
+| `dartnative.env` | `object` | `{}` | Additional environment variables to be added to all Dart/DartNative processes spawned by the DartNative extension. |
+| `dartnative.toolingDaemonAdditionalArgs` | `array` | `[]` | Additional args to pass to the `dart tooling-daemon` command that runs as a background service (requires restart). |
 
 ### Experimental Settings (8)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.normalizeFileCasing` | `boolean` | `false` | Whether to normalize file casings before sending them to the LSP server. This may fix issues with file_names lints not disappearing after renaming a file if the VS Code API continues to use the original casing. |
-| `dartx.daemonPort` | `null \| number` | `null` | EXPERIMENTAL: The port where the daemon can be accessed if daemon is run remotely. This setting is intended for use by developers. |
-| `dartx.previewCommitCharacters` | `boolean` | `false` | EXPERIMENTAL: Whether to enable commit characters for the LSP server. In a future release, the dart.enableCompletionCommitCharacters setting will also apply to LSP. |
-| `dartx.previewHotReloadOnSaveWatcher` | `boolean` | `false` | Whether to perform hot reload on save based on a filesystem watcher for Dart files rather than using VS Code's `onDidSave` event. This allows reloads to trigger when external tools modify Dart source files. |
-| `dartx.experimentalRefactors` | `boolean` | `false` | Whether to enable experimental (possibly unfinished or unstable) refactors on the lightbulb menu. This setting is intended for use by Dart Analysis Server developers or users that want to try out and provide feedback on in-progress refactors. |
-| `dartx.interactiveForms` | `boolean` | `true` | Whether to enable the Interactive Forms feature used for accepting user input during refactors. |
-| `dartx.dynamicTestTracking` | `boolean` | `true` | Whether to use the new dynamic test tracking. This is a temporary setting that will be removed in an upcoming release. |
-| `dartx.experimentalDtdHandlers` | `boolean` | `false` | Whether to enable experimental (possibly unfinished or unstable) LSP handlers through DTD. This setting is passed to the analysis server in the connectToDtd request and therefore relies on DTD being supported and enabled for the analysis server (requires restart). |
+| `dartnative.normalizeFileCasing` | `boolean` | `false` | Whether to normalize file casings before sending them to the LSP server. This may fix issues with file_names lints not disappearing after renaming a file if the VS Code API continues to use the original casing. |
+| `dartnative.daemonPort` | `null \| number` | `null` | EXPERIMENTAL: The port where the daemon can be accessed if daemon is run remotely. This setting is intended for use by developers. |
+| `dartnative.previewCommitCharacters` | `boolean` | `false` | EXPERIMENTAL: Whether to enable commit characters for the LSP server. In a future release, the dart.enableCompletionCommitCharacters setting will also apply to LSP. |
+| `dartnative.previewHotReloadOnSaveWatcher` | `boolean` | `false` | Whether to perform hot reload on save based on a filesystem watcher for Dart files rather than using VS Code's `onDidSave` event. This allows reloads to trigger when external tools modify Dart source files. |
+| `dartnative.experimentalRefactors` | `boolean` | `false` | Whether to enable experimental (possibly unfinished or unstable) refactors on the lightbulb menu. This setting is intended for use by Dart Analysis Server developers or users that want to try out and provide feedback on in-progress refactors. |
+| `dartnative.interactiveForms` | `boolean` | `true` | Whether to enable the Interactive Forms feature used for accepting user input during refactors. |
+| `dartnative.dynamicTestTracking` | `boolean` | `true` | Whether to use the new dynamic test tracking. This is a temporary setting that will be removed in an upcoming release. |
+| `dartnative.experimentalDtdHandlers` | `boolean` | `false` | Whether to enable experimental (possibly unfinished or unstable) LSP handlers through DTD. This setting is passed to the analysis server in the connectToDtd request and therefore relies on DTD being supported and enabled for the analysis server (requires restart). |
 
 ### Legacy Settings (2)
 
 | Setting Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `dartx.lineLength` | `integer` | `80` | **LEGACY SETTING: Use `formatter.page_width` in `analysis_options.yaml` instead.**  The maximum length of a line of code. This is used by the document formatter. If you change this value, you may wish to update `editor.rulers` (which draws vertical lines in the editor) in the `["dart"]` section of your settings to match. |
-| `dartx.onlyAnalyzeProjectsWithOpenFiles` | `boolean` | `false` | **Deprecated**: Whether to ignore workspace folders and perform analysis based on the open files. This setting can make performance significantly worse when moving around a project and is not recommended. |
+| `dartnative.lineLength` | `integer` | `80` | **LEGACY SETTING: Use `formatter.page_width` in `analysis_options.yaml` instead.**  The maximum length of a line of code. This is used by the document formatter. If you change this value, you may wish to update `editor.rulers` (which draws vertical lines in the editor) in the `["dart"]` section of your settings to match. |
+| `dartnative.onlyAnalyzeProjectsWithOpenFiles` | `boolean` | `false` | **Deprecated**: Whether to ignore workspace folders and perform analysis based on the open files. This setting can make performance significantly worse when moving around a project and is not recommended. |
 

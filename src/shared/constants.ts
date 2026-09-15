@@ -4,7 +4,7 @@ import { versionIsAtLeast } from "./utils";
 
 export type SdkTypeString = "Dart" | "Flutter" | "DartNative";
 
-export const dartCodeExtensionIdentifier = "Dart-Code.dartx";
+export const dartCodeExtensionIdentifier = "Beatcode-studio.dartnative";
 export const flutterExtensionIdentifier = "Dart-Code.flutter";
 export const debugAdapterPath = "out/dist/debug.js";
 

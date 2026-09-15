@@ -1,7 +1,8 @@
 {
 	"_comment": "DartNative manifest overlay — applied by scripts/patch-manifest.ts at build time.",
 	"displayName": "DartNative",
-	"name": "dartx",
+	"name": "dartnative",
+	"publisher": "Beatcode-studio",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
 	"keywords": [
 		"dart",
@@ -208,7 +209,7 @@
 			"description": "The path to a log file for the `dartnative daemon` service, which provides information about connected devices accessible from the status bar. Use `${workspaceName}` to insert the name of the current workspace in the file path. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). Only the noted substitutions are supported, others will stay as-is."
 		},
 		"dart.flutterSdkPath": {
-			"description": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartX will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
+			"description": "The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartNative will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
 		},
 		"dart.flutterSdkPaths": {
 			"description": "An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and runtime are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows)."
@@ -222,7 +223,7 @@
 			]
 		},
 		"dart.addSdkToTerminalPath": {
-			"description": "Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartx.dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart)."
+			"description": "Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartnative.dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart)."
 		},
 		"dart.allowTestsOutsideTestFolder": {
 			"description": "Whether to consider files ending `_test.dart` that are outside of the test directory as tests. This should be enabled if you put tests inside the `lib` directory of your DartNative app so they will be run with test commands."
@@ -231,7 +232,7 @@
 			"description": "How many levels (including the workspace roots) down the workspace to search for Dart/DartNative projects. Increasing this number may help detect DartNative projects that are deeply nested in your workspace but slow down all operations that search for projects, including extension activation (requires restart)."
 		},
 		"dart.env": {
-			"description": "Additional environment variables to be added to all Dart/DartNative processes spawned by the DartX extension."
+			"description": "Additional environment variables to be added to all Dart/DartNative processes spawned by the DartNative extension."
 		},
 		"dart.enableSnippets": {
 			"description": "Whether to include Dart and DartNative snippets in code completion."
@@ -257,7 +258,7 @@
 			"dart.enableWidgetRefactors": {
 				"type": "boolean",
 				"default": true,
-				"markdownDescription": "Whether to enable built-in DartX widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin.",
+				"markdownDescription": "Whether to enable built-in DartNative widget refactorings (Wrap with Padding, Container, Row, Column, Center, Expanded, Extract Widget, etc.). Set to false if you are using a Dart analysis server plugin.",
 				"scope": "resource"
 			},
 			"dart.formatAfterSnippet": {
@@ -332,7 +333,7 @@
 	],
 	"settingPrefixRename": {
 		"fromPrefix": "dart.",
-		"toPrefix": "dartx."
+		"toPrefix": "dartnative."
 	},
 	"snippets": [
 		{

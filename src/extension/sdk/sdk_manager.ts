@@ -120,7 +120,7 @@ export class FlutterSdkManager extends SdkManager {
 	protected get sdkPaths(): string[] { return config.dartNativeSdkPaths; }
 	protected get currentSdk(): string | undefined { return this.sdks.flutter; }
 	protected get configuredSdk(): string | undefined { return config.dartNativeSdkPath; }
-	protected get configName(): string { return "dartx.dartNativeSdkPaths"; }
+	protected get configName(): string { return "dartnative.dartNativeSdkPaths"; }
 	protected get executablePath() { return path.join("bin", executableNames.dn); }
 	protected isSdkFolder(folder: string): boolean {
 		return existsAndIsFileSync(path.join(folder, "bin", executableNames.dn))
