@@ -36,12 +36,12 @@ class Config {
 
 	constructor() {
 		this.config = workspace.getConfiguration("dart");
-		this.configX = workspace.getConfiguration("dartx");
+		this.configX = workspace.getConfiguration("dartnative");
 	}
 
 	public reload() {
 		this.config = workspace.getConfiguration("dart");
-		this.configX = workspace.getConfiguration("dartx");
+		this.configX = workspace.getConfiguration("dartnative");
 	}
 
 	private getConfig<T>(key: string, defaultValue: T): NullAsUndefined<T> {
@@ -342,7 +342,7 @@ class ResolvedConfig {
 			return dartValue as T;
 
 		if (section === "dart") {
-			const xVal = workspace.getConfiguration("dartx", isResourceScoped ? this.dummyDartFile : undefined).get<T>(modernKey);
+			const xVal = workspace.getConfiguration("dartnative", isResourceScoped ? this.dummyDartFile : undefined).get<T>(modernKey);
 			if (xVal !== undefined && xVal !== null)
 				return xVal;
 		}
@@ -359,7 +359,7 @@ export class ResourceConfig {
 	constructor(uri?: Uri) {
 		this.uri = uri;
 		this.config = workspace.getConfiguration("dart", this.uri);
-		this.configX = workspace.getConfiguration("dartx", this.uri);
+		this.configX = workspace.getConfiguration("dartnative", this.uri);
 	}
 
 	private getConfig<T>(key: string, defaultValue: T): NullAsUndefined<T> {

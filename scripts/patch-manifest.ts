@@ -37,7 +37,7 @@ function main() {
 	const overlay = JSON.parse(fs.readFileSync(OVERLAY_PATH, "utf8"));
 
 	// 1. Apply top-level field overrides.
-	for (const field of ["name", "displayName", "description", "icon", "keywords"] as const) {
+	for (const field of ["name", "displayName", "publisher", "description", "icon", "keywords"] as const) {
 		if (overlay[field]) {
 			console.log(`  → ${field}: "${pkg[field]}" → "${overlay[field]}"`);
 			pkg[field] = overlay[field];
@@ -401,8 +401,8 @@ function main() {
 		}
 	}
 
-	// 14. Rename configuration setting prefix (e.g. dart. -> dartx.) so that
-	// VS Code Settings editor headings display "DartX: <Setting Title>".
+	// 14. Rename configuration setting prefix (e.g. dart. -> dartnative.) so that
+	// VS Code Settings editor headings display "DartNative: <Setting Title>".
 	if (overlay.settingPrefixRename) {
 		const { fromPrefix, toPrefix } = overlay.settingPrefixRename;
 		console.log(`  → renaming configuration setting prefix: "${fromPrefix}" → "${toPrefix}"`);
@@ -418,7 +418,7 @@ function main() {
 			}
 		}
 
-		// Update internal setting references in descriptions: #dart.foo# -> #dartx.foo#
+		// Update internal setting references in descriptions: #dart.foo# -> #dartnative.foo#
 		const escapedFromPrefix = fromPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 		for (const config of configs) {
 			if (config.properties) {

@@ -200,11 +200,11 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	// is what causes the config reload when the SDK paths are selected during "Locate SDK".
 	context.subscriptions.push(vs.workspace.onDidChangeConfiguration((e) => {
 		config.reload();
-		if (e.affectsConfiguration("dart.env") || e.affectsConfiguration("dart.allowAnalytics") || e.affectsConfiguration("telemetry.telemetryLevel") || e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartx.dartNativeLicenseKey"))
+		if (e.affectsConfiguration("dart.env") || e.affectsConfiguration("dart.allowAnalytics") || e.affectsConfiguration("telemetry.telemetryLevel") || e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartnative.dartNativeLicenseKey"))
 			setEnvHelper();
-		if (e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartx.dartNativeLicenseKey"))
+		if (e.affectsConfiguration("dart.dartNativeLicenseKey") || e.affectsConfiguration("dartnative.dartNativeLicenseKey"))
 			syncLicenseKeyEnv();
-		if (e.affectsConfiguration("dart.showCommandsWhenSdkMissing") || e.affectsConfiguration("dartx.showCommandsWhenSdkMissing")) {
+		if (e.affectsConfiguration("dart.showCommandsWhenSdkMissing") || e.affectsConfiguration("dartnative.showCommandsWhenSdkMissing")) {
 			const show = config.showCommandsWhenSdkMissing;
 			void vs.commands.executeCommand("setContext", PROJECT_LOADED, show);
 			void vs.commands.executeCommand("setContext", FLUTTER_PROJECT_LOADED, show);
@@ -238,7 +238,26 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 		}
 		// Don't set anything else up; we can't work like this!
 		sdkUtils.handleMissingSdks(workspaceContextUnverified);
-		return;
+
+		if (isDartCodeTestRun) {
+			const partialPrivateApi: Partial<InternalExtensionApi> = {
+				clearCaches,
+				dartCapabilities,
+				envUtils,
+				flutterCapabilities,
+				getLogHeader,
+				getToolEnv,
+				logger,
+				sdkUtils,
+				workspaceContext: workspaceContextUnverified as any,
+			};
+			Object.defineProperties(
+				(exportedApi as any)[internalApiSymbol] ??= {},
+				Object.getOwnPropertyDescriptors(partialPrivateApi),
+			);
+		}
+
+		return exportedApi;
 	}
 
 	const workspaceContext = workspaceContextUnverified as DartWorkspaceContext;

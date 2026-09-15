@@ -12,7 +12,7 @@ on:
         default: ""
 
 permissions:
-  contents: write   # needed to create GitHub Releases and upload assets
+  contents: write # needed to create GitHub Releases and upload assets
 
 jobs:
   release:
@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0   # full history so we can read tags
+          fetch-depth: 0 # full history so we can read tags
 
       - name: Set up Node 22
         uses: actions/setup-node@v7
@@ -151,22 +151,3 @@ jobs:
           files: "${{ steps.vsix.outputs.file }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  notify_failure:
-    name: Notify Discord of Failure
-    needs: release
-    if: failure()
-    runs-on: ubuntu-latest
-    permissions:
-      contents: none
-    steps:
-      - name: Send failure notification to Discord
-        run: |
-          Invoke-WebRequest `
-            -Headers @{ "Content-Type" = "application/json" } `
-            -Method Post `
-            -Body "{``"content``":``"VSIX release failed for $($env:GITHUB_REF): https://github.com/$($env:GITHUB_REPOSITORY)/actions/runs/$($env:GITHUB_RUN_ID)``"}" `
-            -Uri $env:DISCORD_WEBHOOK
-        shell: pwsh
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}

@@ -39,7 +39,7 @@ All notable changes to the "dartnative" extension will be documented in this fil
   - Configuration setting `dart.dartNativeLicenseKey` for workspace/user settings.
   - Exports `DN_LICENSE_KEY` environment variable and appends `--dart-define=DN_LICENSE_KEY=<key>` to `dn run` and debug launch configurations.
 - **Configurable Command Palette Visibility**:
-  - Added boolean setting `dartx.showCommandsWhenSdkMissing` to toggle whether other commands (such as Get Packages) are displayed in the Command Palette when the SDK is missing or not configured.
+  - Added boolean setting `dartnative.showCommandsWhenSdkMissing` to toggle whether other commands (such as Get Packages) are displayed in the Command Palette when the SDK is missing or not configured.
 - **Fixes**:
   - Fixed "Add SDK to PATH" notification branding so it displays "The DartNative SDK is already in your PATH" instead of "The Flutter SDK...".
   - Fixed duplicate command registration of `dartnative.addSdkToPath` when missing SDK fallback handlers are active.
