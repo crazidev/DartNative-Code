@@ -172,6 +172,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	// Commands that must be available unconditionally, even before SDKs are found or if SDKs are missing.
 	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
 	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, workspaceContextHolder.current?.sdks)));
+	context.subscriptions.push(vs.commands.registerCommand("_dart.formatDocument", async () => {
+		try {
+			await vs.commands.executeCommand("editor.action.formatDocument");
+		} catch (e) {
+			logger.warn(`Failed to format document: ${e}`);
+		}
+	}));
 
 	// Configure if using flutter-dev.
 	setFlutterDev(config.useFlutterDev);

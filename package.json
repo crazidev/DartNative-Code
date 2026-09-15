@@ -74,7 +74,8 @@
 		"onCommand:pub.get",
 		"onCommand:pub.get.all",
 		"onCommand:flutter.packages.get",
-		"onCommand:flutter.packages.get.all"
+		"onCommand:flutter.packages.get.all",
+		"onCommand:_dart.formatDocument"
 	],
 	"main": "./out/dist/extension",
 	"contributes": {
@@ -3396,9 +3397,11 @@
 		"lint:fix": "eslint --fix",
 		"pretest": "npm run build && npm run build-tests && npm run instrument-dist && npm run instrument",
 		"test": "xvfb-maybe node ./out/src/test/test_all.js",
+		"test:unit": "mocha \"out/src/test/unit/**/*.test.js\"",
+		"test:dartnative": "BOT=dartnative npm test",
 		"posttest": "npm run report_lcov && npm run report_screen",
 		"test-grammar": "vscode-tmgrammar-snap --expandDiff src/test/test_projects/grammar_testing/**/*.dart",
-		"test-all": "npm run test && npm run test-grammar",
+		"test-all": "npm run test:unit && npm run test && npm run test-grammar",
 		"instrument-dist": "cd out/dist && nyc instrument --compact false --in-place . . && cd ../..",
 		"instrument": "cd out/src && nyc instrument --compact false --in-place . . && cd ../..",
 		"report_lcov": "nyc report -r lcovonly --report-dir coverage/$BOT",
