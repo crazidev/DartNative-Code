@@ -7,7 +7,7 @@ export class WebClient {
 	private readonly userAgent: string;
 
 	constructor(extensionVersion: string) {
-		this.userAgent = `Dart-Code/${extensionVersion} (https://dartcode.org/)`;
+		this.userAgent = `Dart-Code/${extensionVersion} (https://dartnative.com/)`;
 	}
 
 	// TODO: Move over things over to this...

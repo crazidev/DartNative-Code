@@ -37,7 +37,7 @@ function main() {
 	const overlay = JSON.parse(fs.readFileSync(OVERLAY_PATH, "utf8"));
 
 	// 1. Apply top-level field overrides.
-	for (const field of ["name", "displayName", "publisher", "version", "description", "icon", "keywords", "bugs", "repository"] as const) {
+	for (const field of ["name", "displayName", "publisher", "version", "description", "homepage", "icon", "keywords", "bugs", "repository"] as const) {
 		if (overlay[field]) {
 			console.log(`  → ${field}: "${JSON.stringify(pkg[field])}" → "${JSON.stringify(overlay[field])}"`);
 			pkg[field] = overlay[field];
