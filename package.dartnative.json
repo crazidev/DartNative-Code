@@ -321,7 +321,8 @@
 		"onCommand:pub.get",
 		"onCommand:pub.get.all",
 		"onCommand:flutter.packages.get",
-		"onCommand:flutter.packages.get.all"
+		"onCommand:flutter.packages.get.all",
+		"onCommand:_dart.formatDocument"
 	],
 	"commandPalette": [
 		{
@@ -346,6 +347,12 @@
 	"scripts": {
 		"test:unit": "mocha \"out/src/test/unit/**/*.test.js\"",
 		"test:dartnative": "BOT=dartnative npm test",
-		"test-all": "npm run test:unit && npm run test && npm run test-grammar"
+		"test-all": "npm run test:unit && npm run test && npm run test-grammar",
+		"patch:all": "./scripts/patch-all.sh",
+		"patch:manifest": "node scripts/patch-manifest.js",
+		"patch:source": "node scripts/patch-source.js",
+		"unpatch:all": "./scripts/unpatch-all.sh",
+		"unpatch:manifest": "node scripts/unpatch-manifest.js",
+		"unpatch:source": "node scripts/unpatch-source.js"
 	}
 }

@@ -3397,8 +3397,6 @@
 		"lint:fix": "eslint --fix",
 		"pretest": "npm run build && npm run build-tests && npm run instrument-dist && npm run instrument",
 		"test": "xvfb-maybe node ./out/src/test/test_all.js",
-		"test:unit": "mocha \"out/src/test/unit/**/*.test.js\"",
-		"test:dartnative": "BOT=dartnative npm test",
 		"posttest": "npm run report_lcov && npm run report_screen",
 		"test-grammar": "vscode-tmgrammar-snap --expandDiff src/test/test_projects/grammar_testing/**/*.dart",
 		"test-all": "npm run test:unit && npm run test && npm run test-grammar",
@@ -3406,7 +3404,15 @@
 		"instrument": "cd out/src && nyc instrument --compact false --in-place . . && cd ../..",
 		"report_lcov": "nyc report -r lcovonly --report-dir coverage/$BOT",
 		"report_screen": "nyc report",
-		"update-grammar-snapshots": "vscode-tmgrammar-snap --updateSnapshot \"src/test/test_projects/grammar_testing/**/*.dart\""
+		"update-grammar-snapshots": "vscode-tmgrammar-snap --updateSnapshot \"src/test/test_projects/grammar_testing/**/*.dart\"",
+		"test:unit": "mocha \"out/src/test/unit/**/*.test.js\"",
+		"test:dartnative": "BOT=dartnative npm test",
+		"patch:all": "./scripts/patch-all.sh",
+		"patch:manifest": "node scripts/patch-manifest.js",
+		"patch:source": "node scripts/patch-source.js",
+		"unpatch:all": "./scripts/unpatch-all.sh",
+		"unpatch:manifest": "node scripts/unpatch-manifest.js",
+		"unpatch:source": "node scripts/unpatch-source.js"
 	},
 	"dependencies": {
 		"@vscode/debugadapter": "~1.68.0",
