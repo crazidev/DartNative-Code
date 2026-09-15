@@ -23,5 +23,6 @@ node_modules/
 out/
 pubspec.lock
 package.json.upstream
+*.vsix
 .agents/
 skills-lock.json
