@@ -2,21 +2,18 @@ name: Nightly Build
 
 on:
   schedule:
-     - cron: '0 7 * * 1-5'
+    - cron: "0 7 * * 1-5"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-
   build:
-
     name: "Package Extension"
     runs-on: ubuntu-latest
 
     steps:
-
       - uses: actions/checkout@v7
 
       - name: Setup Node
@@ -55,21 +52,3 @@ jobs:
         with:
           name: nightly-build-vsix
           path: "*.vsix"
-
-
-  notify_failure:
-
-    permissions:
-      contents: none
-    name: Notify Discord of Failure
-    needs: build
-    if: failure()
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - name: Send notification to Discord
-        run: 'Invoke-WebRequest -Headers @{ "Content-Type" = "application/json" } -Method Post -Body "{`"content`":`"Nightly build packaging failed on $($env:GITHUB_REF.Replace(`"refs/heads/`", `"`")): https://github.com/Dart-Code/Dart-Code/commit/$($env:GITHUB_SHA)/checks`"}" -Uri $env:DISCORD_WEBHOOK'
-        shell: pwsh
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
