@@ -149,6 +149,16 @@ async function runAllTests(): Promise<void> {
 	}
 
 	try {
+		if (shouldRunBot("unit", { onlyIfExplicit: true })) {
+			console.log("\nRunning DartNative Unit Tests...\n");
+			const { spawnSync } = await import("child_process");
+			const mochaResult = spawnSync("npx", ["mocha", "out/src/test/unit/**/*.test.js"], { stdio: "inherit", shell: true });
+			if (mochaResult.status !== 0)
+				exitCode = exitCode || (mochaResult.status ?? 1);
+		}
+		if (shouldRunBot("dartnative")) {
+			await runTests("dartnative", "dartnative_starter", undefined);
+		}
 		if (shouldRunBot("dart")) {
 			await runTests("dart", "hello_world", undefined);
 		}

@@ -1,0 +1,172 @@
+name: Build & Release VSIX
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to release (e.g. v3.144.0). Leave blank to use the version in package.json."
+        required: false
+        default: ""
+
+permissions:
+  contents: write   # needed to create GitHub Releases and upload assets
+
+jobs:
+  release:
+    name: "Package & Release"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # full history so we can read tags
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Set up icon submodule
+        run: |
+          git submodule init
+          git submodule update
+        shell: bash
+
+      - name: npm install
+        run: npm install
+
+      - name: npm lint
+        run: npm run lint
+
+      - name: npm build (production)
+        run: npm run build -- --mode production
+
+      # -------------------------------------------------------------------
+      # Determine the release version
+      # -------------------------------------------------------------------
+      - name: Resolve release version
+        id: version
+        run: |
+          # If manually dispatched with an explicit tag, strip the leading "v".
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            VER="${{ github.event.inputs.tag }}"
+            VER="${VER#v}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Triggered by a version tag — strip "refs/tags/v".
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            # Fallback: read from package.json
+            VER=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Releasing version: $VER"
+        shell: bash
+
+      # -------------------------------------------------------------------
+      # Extract the changelog section for this version from CHANGELOG.md
+      # Supports headers like:
+      #   ## [3.144.0]
+      #   ## [3.144.0] - 2026-09-13
+      # -------------------------------------------------------------------
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CHANGELOG_FILE="CHANGELOG.md"
+
+          START_LINE=$(grep -n "^## \[${VERSION}\]" "$CHANGELOG_FILE" | head -1 | cut -d: -f1)
+
+          if [[ -z "$START_LINE" ]]; then
+            echo "WARNING: No changelog entry found for version ${VERSION}."
+            printf "No changelog entry found for version %s." "$VERSION" > release_notes.md
+          else
+            END_LINE=$(awk -v start="$START_LINE" 'NR > start && /^## / { print NR; exit }' "$CHANGELOG_FILE")
+            if [[ -z "$END_LINE" ]]; then
+              tail -n "+$((START_LINE + 1))" "$CHANGELOG_FILE" > release_notes.md
+            else
+              sed -n "$((START_LINE + 1)),$((END_LINE - 1))p" "$CHANGELOG_FILE" > release_notes.md
+            fi
+          fi
+
+          echo "--- Release notes preview ---"
+          cat release_notes.md
+        shell: bash
+
+      # -------------------------------------------------------------------
+      # Pin the version in package.json to the release version
+      # -------------------------------------------------------------------
+      - name: Set package.json version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "package.json version set to $VERSION"
+        shell: bash
+
+      # -------------------------------------------------------------------
+      # Package the VSIX
+      # -------------------------------------------------------------------
+      - name: Package VSIX
+        run: vsce package --no-git-tag-version
+        shell: bash
+
+      - name: Locate packaged VSIX
+        id: vsix
+        run: |
+          FILE=$(ls *.vsix | head -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "Packaged: $FILE"
+        shell: bash
+
+      # -------------------------------------------------------------------
+      # Upload the VSIX as a workflow artifact (always available, even
+      # for workflow_dispatch runs that don't create a Release)
+      # -------------------------------------------------------------------
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: "vsix-${{ steps.version.outputs.version }}"
+          path: "*.vsix"
+          if-no-files-found: error
+
+      # -------------------------------------------------------------------
+      # Create a GitHub Release with the changelog and VSIX attached.
+      # Runs on tag pushes and manual workflow_dispatch.
+      # Pre-release flag is set automatically when version contains "-"
+      # (e.g. 3.144.0-dev, 3.144.0-beta.1).
+      # -------------------------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.version.outputs.version }}"
+          name: "DartNative Extension v${{ steps.version.outputs.version }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          files: "${{ steps.vsix.outputs.file }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify_failure:
+    name: Notify Discord of Failure
+    needs: release
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: none
+    steps:
+      - name: Send failure notification to Discord
+        run: |
+          Invoke-WebRequest `
+            -Headers @{ "Content-Type" = "application/json" } `
+            -Method Post `
+            -Body "{``"content``":``"VSIX release failed for $($env:GITHUB_REF): https://github.com/$($env:GITHUB_REPOSITORY)/actions/runs/$($env:GITHUB_RUN_ID)``"}" `
+            -Uri $env:DISCORD_WEBHOOK
+        shell: pwsh
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}

@@ -74,7 +74,8 @@
 		"onCommand:pub.get",
 		"onCommand:pub.get.all",
 		"onCommand:flutter.packages.get",
-		"onCommand:flutter.packages.get.all"
+		"onCommand:flutter.packages.get.all",
+		"onCommand:_dart.formatDocument"
 	],
 	"main": "./out/dist/extension",
 	"contributes": {
@@ -3398,12 +3399,20 @@
 		"test": "xvfb-maybe node ./out/src/test/test_all.js",
 		"posttest": "npm run report_lcov && npm run report_screen",
 		"test-grammar": "vscode-tmgrammar-snap --expandDiff src/test/test_projects/grammar_testing/**/*.dart",
-		"test-all": "npm run test && npm run test-grammar",
+		"test-all": "npm run test:unit && npm run test && npm run test-grammar",
 		"instrument-dist": "cd out/dist && nyc instrument --compact false --in-place . . && cd ../..",
 		"instrument": "cd out/src && nyc instrument --compact false --in-place . . && cd ../..",
 		"report_lcov": "nyc report -r lcovonly --report-dir coverage/$BOT",
 		"report_screen": "nyc report",
-		"update-grammar-snapshots": "vscode-tmgrammar-snap --updateSnapshot \"src/test/test_projects/grammar_testing/**/*.dart\""
+		"update-grammar-snapshots": "vscode-tmgrammar-snap --updateSnapshot \"src/test/test_projects/grammar_testing/**/*.dart\"",
+		"test:unit": "mocha \"out/src/test/unit/**/*.test.js\"",
+		"test:dartnative": "BOT=dartnative npm test",
+		"patch:all": "./scripts/patch-all.sh",
+		"patch:manifest": "node scripts/patch-manifest.js",
+		"patch:source": "node scripts/patch-source.js",
+		"unpatch:all": "./scripts/unpatch-all.sh",
+		"unpatch:manifest": "node scripts/unpatch-manifest.js",
+		"unpatch:source": "node scripts/unpatch-source.js"
 	},
 	"dependencies": {
 		"@vscode/debugadapter": "~1.68.0",

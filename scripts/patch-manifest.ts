@@ -446,6 +446,15 @@ function main() {
 		}
 	}
 
+	// 12. Overlay npm scripts if defined in overlay.
+	if (overlay.scripts && typeof overlay.scripts === "object") {
+		pkg.scripts = pkg.scripts || {};
+		for (const [sKey, sVal] of Object.entries(overlay.scripts)) {
+			console.log(`  → script [${sKey}]: "${pkg.scripts[sKey]}" → "${sVal}"`);
+			pkg.scripts[sKey] = sVal;
+		}
+	}
+
 	const patched = JSON.stringify(pkg, null, "\t") + "\n";
 
 	if (isDryRun) {
