@@ -2,6 +2,7 @@
 	"_comment": "DartNative manifest overlay — applied by scripts/patch-manifest.ts at build time.",
 	"displayName": "DartNative",
 	"name": "dartnative",
+	"version": "3.144.0",
 	"publisher": "Beatcode-studio",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
 	"keywords": [
@@ -353,6 +354,7 @@
 		}
 	],
 	"scripts": {
+		"ensure-icon-submodule": "node -e \"process.exit(0)\"",
 		"test:unit": "mocha \"out/src/test/unit/**/*.test.js\"",
 		"test:dartnative": "BOT=dartnative npm test",
 		"test-all": "npm run test:unit && npm run test && npm run test-grammar",

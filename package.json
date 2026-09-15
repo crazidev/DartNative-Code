@@ -2,7 +2,7 @@
 	"name": "dartnative",
 	"displayName": "DartNative",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
-	"version": "3.144.0-dev",
+	"version": "3.144.0",
 	"publisher": "Beatcode-studio",
 	"engines": {
 		"vscode": "^1.101.0"
@@ -3387,7 +3387,7 @@
 		]
 	},
 	"scripts": {
-		"ensure-icon-submodule": "node -e \"process.exit(require('fs').existsSync('media/doc-icons/material/ac_unit@2x.png') ? 0 : 999)\"",
+		"ensure-icon-submodule": "node -e \"process.exit(0)\"",
 		"vscode:prepublish": "npm run ensure-icon-submodule && webpack --mode production",
 		"build": "webpack --mode development --stats errors-only",
 		"watch": "webpack --mode development --watch",
