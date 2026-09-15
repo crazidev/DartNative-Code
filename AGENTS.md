@@ -8,7 +8,7 @@ This project is the source code for the **Dart** and **Flutter** Visual Studio C
 
 The extension is written in **TypeScript** and interacts with the Dart SDK and Flutter SDK tools to provide features to the user.
 
-The owner and repository name are both **Dart-Code** with the repository hosted at `https://github.com/Dart-Code/Dart-Code/`. These values should be used when interacting with GitHub unless another repository is specifically given.
+The owner and repository name are **crazidev** and **DartNative-Code** with the repository hosted at `https://github.com/crazidev/DartNative-Code/`. These values should be used when interacting with GitHub unless another repository is specifically given.
 
 
 ## Project Structure
