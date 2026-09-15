@@ -11,6 +11,13 @@
 		"dart_native",
 		"dart native"
 	],
+	"bugs": {
+		"url": "https://github.com/crazidev/DartNative-Code/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/crazidev/DartNative-Code.git"
+	},
 	"icon": "media/dartnative.png",
 	"commandCategoryRenames": {
 		"Flutter": "DartNative"

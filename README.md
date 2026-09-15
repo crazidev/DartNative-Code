@@ -18,7 +18,7 @@ mobile apps.
 
 Dart Code can be [installed from the Visual Studio Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code) or by [searching within VS Code](https://code.visualstudio.com/docs/editor/extension-gallery#_search-for-an-extension).
 
-If you have any issues using Dart Code, please file issues on GitHub at [https://github.com/Dart-Code/Dart-Code/issues/new/choose](https://github.com/Dart-Code/Dart-Code).
+If you have any issues using DartNative, please file issues on GitHub at [https://github.com/crazidev/DartNative-Code/issues](https://github.com/crazidev/DartNative-Code/issues).
 
 ## Features
 

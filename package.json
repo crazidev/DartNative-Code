@@ -21,12 +21,12 @@
 	},
 	"license": "SEE LICENSE IN LICENSE",
 	"bugs": {
-		"url": "https://github.com/Dart-Code/Dart-Code/issues"
+		"url": "https://github.com/crazidev/DartNative-Code/issues"
 	},
 	"homepage": "https://dartcode.org/",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Dart-Code/Dart-Code.git"
+		"url": "https://github.com/crazidev/DartNative-Code.git"
 	},
 	"categories": [
 		"Programming Languages",
