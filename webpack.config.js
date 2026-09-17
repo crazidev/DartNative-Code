@@ -20,6 +20,7 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const path = require("path");
 
+/** @param {any} [env] */
 module.exports = (env) => {
 	/**
 	 * @type {import("webpack").Configuration}
@@ -36,7 +37,7 @@ module.exports = (env) => {
 		},
 		module: {
 			rules: [{
-				exclude: /node_modules/,
+				exclude: [/node_modules/, /website/, /landing/],
 				test: /\.ts$/,
 				loader: "ts-loader",
 			}],

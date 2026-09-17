@@ -16,6 +16,9 @@
 			"node"
 		]
 	},
+	"include": [
+		"src/**/*"
+	],
 	"exclude": [
 		".crash_dumps",
 		".dart_code_test_data_dir",
@@ -25,7 +28,9 @@
 		"node_modules",
 		"out",
 		"scripts",
-		"src/test/test_projects"
+		"src/test/test_projects",
+		"website",
+		"landing"
 		// tsconfig.build.json excludes additional paths
 	]
 }
