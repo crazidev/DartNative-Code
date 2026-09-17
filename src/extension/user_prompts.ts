@@ -144,11 +144,11 @@ async function promptAboutOnlyAnalyzeProjectsWithOpenFilesDeprecation(): Promise
 
 async function promptToShowReleaseNotes(versionDisplay: string, versionLink: string): Promise<boolean> {
 	const res = await vs.window.showInformationMessage(
-		`Dart Code has been updated to v${versionDisplay}`,
+		`DartNative has been updated to v${versionDisplay}`,
 		`Show Release Notes`,
 	);
 	if (res) {
-		await envUtils.openInBrowser(`https://dartcode.org/releases/v${versionLink}/`);
+		await envUtils.openInBrowser(`https://github.com/crazidev/DartNative-Code/releases/v${versionLink}/`);
 	}
 	return true; // Always mark this as done; we don't want to prompt the user multiple times.
 }
