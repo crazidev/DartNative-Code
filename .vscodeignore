@@ -37,3 +37,6 @@ tsconfig.*.json
 tsconfig.json
 typings/**
 webpack.config.js
+website/**
+landing/**
+patches/**
