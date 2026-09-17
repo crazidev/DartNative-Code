@@ -2,7 +2,7 @@
 	"_comment": "DartNative manifest overlay — applied by scripts/patch-manifest.ts at build time.",
 	"displayName": "DartNative",
 	"name": "dartnative",
-	"version": "3.144.0",
+	"version": "3.144.1",
 	"publisher": "Beatcode-studio",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
 	"keywords": [
