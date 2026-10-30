@@ -520,10 +520,10 @@ index 20bbb52e..23e22b37 100644
  ## Project Structure
 diff --git a/COMMANDS_AND_SETTINGS.md b/COMMANDS_AND_SETTINGS.md
 new file mode 100644
-index 00000000..f21df7e8
+index 00000000..f151222d
 --- /dev/null
 +++ b/COMMANDS_AND_SETTINGS.md
-@@ -0,0 +1,359 @@
+@@ -0,0 +1,361 @@
 +# Dart-Code Commands & Settings Reference
 +
 +This document catalogs all **VS Code Commands** and **Configuration Settings** contributed by and used within the Dart-Code extension. It serves as a reference for enabling, disabling, and renaming commands and settings.
@@ -840,8 +840,11 @@ index 00000000..f21df7e8
 +| `dartnative.checkForSdkUpdates` | `boolean` | `true` | Whether to check you are using the latest version of the Dart SDK at startup. |
 +| `dartnative.sdkSwitchingTarget` | `enum` | `"workspace"` | Where to save SDK selections when using fast SDK switching from the language status entry. |
 +| `dartnative.addSdkToTerminalPath` | `boolean` | `true` | Whether to add your selected Dart/DartNative SDK path to the `PATH` environment variable for the embedded terminal. This is useful when switching SDKs via `#dartnative..dartNativeSdkPaths#` to ensure commands run from the terminal are the same version as being used by the editor/debugger (requires restart). |
-+| `dartnative.mcpServer` | `boolean` | `true` | Whether to register the Dart SDK's MCP server with VS Code. This only applies to Dart SDKs >= v3.9.0 which added the server. |
-+| `dartnative.mcpServerTools` | `object` | `{"analyze_files":false,"dar...` | A map of MCP tool names to booleans to enable/disable specific tools from the Dart MCP server. Tools set to `false` will be excluded (if supported). By default, tools that overlap with built-in VS Code functionality will be excluded. |
++| `dartnative.mcpServer` | `boolean` | `true` | Whether to register the DartNative SDK's MCP server with VS Code. This only applies to Dart SDKs >= v3.9.0 which added the server. |
++| `dartnative.mcpServerTools` | `object` | `{"analyze_files":false,"dar...` | A map of MCP tool names to booleans to enable/disable tools from the DartNative SDK MCP server. Tools set to `false` will be excluded when supported by the SDK. |
++| `dartnative.mcpServerGitUrl` | `string` | `https://github.com/crazidev/dartnative_mcp` | The Git URL of the `dartnative_mcp` package used by **DartNative: Install MCP Server**. |
++| `dartnative.mcpServerGitRef` | `string` | `main` | The Git branch, tag, or commit to install for **DartNative: Install MCP Server**. |
++| `dartnative.mcpServerPackagePath` | `null \| string` | `null` | An optional local path to a `dartnative_mcp` package. When set, **DartNative: Install MCP Server** activates this path instead of fetching from Git. |
 +| `dartnative.dartNativeSdkPath` | `null \| string` | `null` | The location of the DartNative SDK to use. The Dart SDK (in `bin/cache/dart-sdk`) and runtime are automatically resolved from this same path. If blank (or not a valid SDK), DartNative will attempt to find it from the project directory, `DARTNATIVE_ROOT` environment variable, and the `PATH` environment variable. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
 +| `dartnative.dartNativeSdkPaths` | `array` | `[]` | An array of paths that either directly point to a DartNative SDK or the parent directory of multiple DartNative SDKs that can be used for fast SDK switching. The Dart SDK and runtime are automatically resolved from each SDK path. When this setting is populated, the version number in the status bar can be used to quickly switch between SDKs. Use `~` to insert the user's home directory (the path should then use `/` separators even on Windows). |
 +
@@ -882,7 +885,6 @@ index 00000000..f21df7e8
 +| :--- | :--- | :--- | :--- |
 +| `dartnative.lineLength` | `integer` | `80` | **LEGACY SETTING: Use `formatter.page_width` in `analysis_options.yaml` instead.**  The maximum length of a line of code. This is used by the document formatter. If you change this value, you may wish to update `editor.rulers` (which draws vertical lines in the editor) in the `["dart"]` section of your settings to match. |
 +| `dartnative.onlyAnalyzeProjectsWithOpenFiles` | `boolean` | `false` | **Deprecated**: Whether to ignore workspace folders and perform analysis based on the open files. This setting can make performance significantly worse when moving around a project and is not recommended. |
-+
 diff --git a/README.md b/README.md
 index 40dc4ad2..d6de56b3 100644
 --- a/README.md
@@ -3598,6 +3600,546 @@ index ebec673c..d1e33961 100644
  		if (!this.workspace.sdks.flutter) {
  			this.sdkUtils.showFlutterActivationFailure("flutter.upgrade");
  			return;
+diff --git a/src/extension/commands/mcp.ts b/src/extension/commands/mcp.ts
+new file mode 100644
+index 00000000..df0e0f7f
+--- /dev/null
++++ b/src/extension/commands/mcp.ts
+@@ -0,0 +1,534 @@
++import * as fs from "fs";
++import * as os from "os";
++import * as path from "path";
++import * as vs from "vscode";
++import { dartVMPath, executableNames, isWin } from "../../shared/constants";
++import { isDartNativeProjectFolder } from "../../shared/dartnative/project_detection";
++import { fsPath } from "../../shared/utils/fs";
++import { Logger } from "../../shared/interfaces";
++import { runToolProcess } from "../utils/processes";
++import { getFolderToRunCommandIn } from "../utils/vscode/projects";
++import { config } from "../config";
++
++const serverName = "dartnative";
++const packageName = "dartnative_mcp";
++const skillName = "dartnative-mcp";
++const skillTargetMap: Array<{ target: string; ideIds: string[] }> = [
++	{ target: path.join(".agents", "skills", skillName), ideIds: ["opencode", "antigravity", "codex", "agents"] },
++	{ target: path.join(".cursor", "skills", skillName), ideIds: ["cursor"] },
++	{ target: path.join(".claude", "skills", skillName), ideIds: ["claude"] },
++];
++
++interface IdeTarget {
++	id: string;
++	label: string;
++	detectFolder: string;
++	configPath: string;
++	format: "vscode" | "mcpServers" | "opencode";
++}
++
++// Config locations follow the precedence/order from the Antigravity MCP docs:
++//   - VS Code, Cursor keep their own folders.
++//   - Claude Code keeps .mcp.json / .claude.
++//   - Gemini CLI keeps .gemini/settings.json.
++//   - OpenCode keeps opencode.json.
++//   - Antigravity, Codex and other agents share .agents/mcp_config.json.
++const ideTargets: IdeTarget[] = [
++	{ id: "vscode", label: "VS Code", detectFolder: ".vscode", configPath: path.join(".vscode", "mcp.json"), format: "vscode" },
++	{ id: "cursor", label: "Cursor", detectFolder: ".cursor", configPath: path.join(".cursor", "mcp.json"), format: "mcpServers" },
++	{ id: "claude", label: "Claude Code", detectFolder: ".claude", configPath: ".mcp.json", format: "mcpServers" },
++	{ id: "gemini", label: "Gemini CLI", detectFolder: ".gemini", configPath: path.join(".gemini", "settings.json"), format: "mcpServers" },
++	{ id: "opencode", label: "OpenCode", detectFolder: ".", configPath: "opencode.json", format: "opencode" },
++	{ id: "antigravity", label: "Antigravity", detectFolder: ".agents", configPath: path.join(".agents", "mcp_config.json"), format: "mcpServers" },
++	{ id: "codex", label: "Codex", detectFolder: ".agents", configPath: path.join(".agents", "mcp_config.json"), format: "mcpServers" },
++	{ id: "agents", label: "Other agents (.agents)", detectFolder: ".agents", configPath: path.join(".agents", "mcp_config.json"), format: "mcpServers" },
++];
++
++interface McpLaunch {
++	command: string;
++	args: string[];
++}
++
++/**
++ * Installs the DartNative MCP server and its agent skill into a DartNative
++ * project.
++ *
++ * The server is activated globally from GitHub so that re-running this command
++ * always picks up the latest version. A project-local `.dartnative/mcp.bin`
++ * launcher keeps the MCP client configuration stable and passes the SDK paths
++ * without requiring a working directory.
++ */
++export async function installMcpServerCommand(
++	logger: Logger,
++	sdks: { dart?: string; flutter?: string } | undefined,
++): Promise<void> {
++	const folder = await getFolderToRunCommandIn(
++		logger,
++		"Select the DartNative project to install the MCP server into",
++		{ onlyShowWorkspaceRoots: true },
++	);
++	if (!folder)
++		return;
++
++	if (!isDartNativeProjectFolder(folder)) {
++		void vs.window.showErrorMessage(
++			"The selected folder is not a DartNative project. Add a `dartnative` dependency to `pubspec.yaml` first.",
++		);
++		return;
++	}
++
++	const dnSdkPath = sdks?.flutter;
++	if (!dnSdkPath) {
++		void vs.window.showErrorMessage(
++			"DartNative SDK not found. Run **DartNative: Locate SDK** and try again.",
++		);
++		return;
++	}
++	const dnBinary = path.join(dnSdkPath, "bin", executableNames.dn);
++	if (!fs.existsSync(dnBinary)) {
++		void vs.window.showErrorMessage(
++			`The DartNative executable was not found at ${dnBinary}. Run **DartNative: Locate SDK** and try again.`,
++		);
++		return;
++	}
++
++	const dartSdkPath = sdks?.dart;
++	if (!dartSdkPath) {
++		void vs.window.showErrorMessage(
++			"Dart SDK not found. Run **DartNative: Locate SDK** and try again.",
++		);
++		return;
++	}
++	const dartBinary = path.join(dartSdkPath, dartVMPath);
++	if (!fs.existsSync(dartBinary)) {
++		void vs.window.showErrorMessage(
++			`The Dart executable was not found at ${dartBinary}. Run **DartNative: Locate SDK** and try again.`,
++		);
++		return;
++	}
++
++	const localPackagePath = resolveLocalPackagePath(logger);
++	if (localPackagePath === null)
++		return;
++
++	const gitUrl = config.mcpServerGitUrl.trim();
++	const gitRef = config.mcpServerGitRef.trim();
++	if (!localPackagePath && !gitUrl) {
++		void vs.window.showErrorMessage(
++			"Set `dartnative.mcpServerGitUrl` to the Git URL of the dartnative_mcp package, or set `dartnative.mcpServerPackagePath` to a local package.",
++		);
++		return;
++	}
++
++	const pubCache = getPubCachePath();
++
++	const output = vs.window.createOutputChannel("DartNative MCP");
++	output.show(true);
++	const logLine = (line: string) => {
++		output.appendLine(line);
++		logger.info(line);
++	};
++
++	// Detect installed IDEs and let the user choose which ones to configure.
++	const detected = ideTargets.filter((ide) => {
++		if (ide.detectFolder === ".")
++			return fs.existsSync(path.join(folder, ide.configPath));
++		return (
++			fs.existsSync(path.join(folder, ide.detectFolder)) ||
++			fs.existsSync(path.join(folder, ide.configPath))
++		);
++	});
++	const quickPickItems = ideTargets.map((ide) => ({
++		label: ide.label,
++		description: detected.includes(ide) ? "detected" : "",
++		picked: detected.includes(ide),
++		ide,
++	}));
++	const selectedItems = await vs.window.showQuickPick(quickPickItems, {
++		canPickMany: true,
++		placeHolder: "Select the IDEs to configure with the DartNative MCP server",
++		title: "DartNative: Install MCP Server",
++	});
++	if (!selectedItems || selectedItems.length === 0) {
++		output.appendLine("Installation cancelled: no IDE selected.");
++		return;
++	}
++	const selectedIdeIds = new Set(selectedItems.map((item) => item.ide.id));
++
++	logLine(`Installing DartNative MCP server into ${folder}`);
++	logLine(`Source: ${localPackagePath ?? gitUrl}${gitRef ? ` (${gitRef})` : ""}`);
++	logLine(`Pub cache: ${pubCache}`);
++	logLine(`Selected IDEs: ${selectedItems.map((item) => item.label).join(", ")}`);
++
++	await vs.window.withProgress(
++		{
++			cancellable: false,
++			location: vs.ProgressLocation.Notification,
++			title: "Installing DartNative MCP server",
++		},
++		async (progress) => {
++			progress.report({
++				message: localPackagePath
++					? "Activating dartnative_mcp from the local path"
++					: "Fetching dartnative_mcp from GitHub",
++			});
++			const activateArgs = localPackagePath
++				? ["pub", "global", "activate", "--source", "path", localPackagePath, "--no-executables"]
++				: [
++					"pub",
++					"global",
++					"activate",
++					"--source",
++					"git",
++					gitUrl,
++					...(gitRef ? ["--git-ref", gitRef] : []),
++					"--no-executables",
++				];
++			const activateResult = await runToolProcess(
++				logger,
++				folder,
++				dartBinary,
++				activateArgs,
++				{ PUB_CACHE: pubCache },
++			);
++			if (activateResult.exitCode !== 0) {
++				// Pub can report an error while updating unrelated executable shims
++				// (for example a corrupt shim in the pub cache) even though the
++				// package was activated. Verify by running the server before failing.
++				const details = activateResult.stderr || activateResult.stdout;
++				logLine(`dart pub global activate exited with ${activateResult.exitCode}: ${details}`);
++			} else {
++				logLine("dart pub global activate completed successfully.");
++			}
++
++			progress.report({ message: "Verifying dartnative_mcp" });
++			const verifyResult = await runToolProcess(
++				logger,
++				folder,
++				dartBinary,
++				["pub", "global", "run", packageName, "--version"],
++				{ PUB_CACHE: pubCache },
++			);
++			if (verifyResult.exitCode !== 0) {
++				const details = activateResult.stderr || activateResult.stdout || verifyResult.stderr || verifyResult.stdout;
++				logger.error(`Failed to install ${packageName}: ${details}`);
++				void vs.window.showErrorMessage(
++					`Failed to install ${packageName}: ${details}`,
++				);
++				return;
++			}
++			const installedVersion = verifyResult.stdout.trim() || "(version unknown)";
++			logLine(`Activated ${packageName} ${installedVersion}.`);
++
++			progress.report({ message: "Writing .dartnative/mcp.bin" });
++			let launch: McpLaunch;
++			try {
++				launch = writeLauncher(folder, dartBinary, dnSdkPath, pubCache);
++			} catch (e) {
++				logger.error(`Failed to write the MCP launcher: ${e}`);
++				void vs.window.showErrorMessage(`Failed to write the MCP launcher: ${e}`);
++				return;
++			}
++			logLine(`Wrote launcher: ${isWin ? ".dart_tool/mcp.bin.cmd" : ".dart_tool/mcp.bin"}`);
++
++			progress.report({ message: "Writing MCP client configuration" });
++			const written = writeMcpConfigs(folder, launch, selectedIdeIds);
++			if (written.length === 0) {
++				void vs.window.showErrorMessage(
++					"Could not write any MCP configuration. Existing files may contain invalid JSON.",
++				);
++				return;
++			}
++			logLine("Configured MCP clients:");
++			for (const file of written) logLine(`  - ${file}`);
++
++			progress.report({ message: "Copying the agent skill" });
++			const installedPackagePath = localPackagePath ?? findInstalledPackagePath(pubCache, logger);
++			if (installedPackagePath) {
++				const copiedSkills = copySkill(logger, installedPackagePath, folder, selectedIdeIds);
++				if (copiedSkills.length > 0) {
++					logLine("Installed skills:");
++					for (const target of copiedSkills) logLine(`  - ${target}/SKILL.md`);
++				} else {
++					logLine("No agent skills copied (none of the selected IDEs use skills).");
++				}
++			} else {
++				logLine("Agent skill was not copied (package path not found).");
++			}
++
++			const launcher = isWin ? ".dart_tool/mcp.bin.cmd" : ".dart_tool/mcp.bin";
++			logLine("");
++			logLine("Summary:");
++			logLine(`  Source: ${localPackagePath ?? gitUrl}${gitRef ? ` (${gitRef})` : ""}`);
++			logLine(`  Version: ${installedVersion}`);
++			logLine(`  Launcher: ${launcher}`);
++			logLine(`  IDEs: ${selectedItems.map((item) => item.label).join(", ")}`);
++			logLine("  Restart your MCP client to connect.");
++			logger.info(
++				`Installed the DartNative MCP server in ${folder} (configs: ${written.join(", ")}).`,
++			);
++			void vs.window
++				.showInformationMessage(
++					`DartNative MCP server installed (${launcher}). Restart your MCP client to connect.`,
++					"Open output",
++					"Open .vscode/mcp.json",
++				)
++				.then((choice) => {
++					if (choice === "Open output") {
++						output.show(true);
++					} else if (choice === "Open .vscode/mcp.json") {
++						void vs.window.showTextDocument(
++							vs.Uri.file(path.join(folder, ".vscode", "mcp.json")),
++						);
++					}
++				});
++		},
++	);
++}
++
++/**
++ * Returns the configured local package path, or undefined when the install
++ * should use Git.
++ *
++ * If the setting is present but invalid, shows an error and returns null so the
++ * caller can abort without silently falling back to a different source.
++ */
++function resolveLocalPackagePath(logger: Logger): string | undefined | null {
++	const configured = config.mcpServerPackagePath;
++	if (!configured)
++		return undefined;
++
++	const resolved = path.resolve(expandHome(configured));
++	if (isMcpPackage(resolved))
++		return resolved;
++
++	logger.error(`Invalid dartnative.mcpServerPackagePath: ${resolved}`);
++	void vs.window.showErrorMessage(
++		`${resolved} is not a dartnative_mcp package (expected pubspec.yaml and bin/dartnative_mcp.dart).`,
++	);
++	return null;
++}
++
++function isMcpPackage(folder: string): boolean {
++	return (
++		fs.existsSync(path.join(folder, "pubspec.yaml")) &&
++		fs.existsSync(path.join(folder, "bin", "dartnative_mcp.dart"))
++	);
++}
++
++/**
++ * The pub cache used by both `pub global activate` and the generated launcher.
++ *
++ * The launcher must not rely on the MCP client's environment, because clients
++ * often start the server without the same `PUB_CACHE` that VS Code used.
++ */
++function getPubCachePath(): string {
++	const configured = process.env.PUB_CACHE?.trim();
++	if (configured)
++		return path.resolve(expandHome(configured));
++
++	if (isWin) {
++		const localAppData = process.env.LOCALAPPDATA?.trim();
++		if (localAppData)
++			return path.join(localAppData, "Pub", "Cache");
++	}
++
++	return path.join(os.homedir(), ".pub-cache");
++}
++
++function expandHome(value: string): string {
++	if (value === "~")
++		return os.homedir();
++	if (value.startsWith("~/") || value.startsWith("~\\"))
++		return path.join(os.homedir(), value.slice(2));
++	return value;
++}
++
++/**
++ * Writes the project-local launcher used by every MCP client.
++ *
++ * The launcher runs the globally activated package with the DartNative SDK
++ * paths already supplied, so the client only needs to know the launcher path.
++ */
++function writeLauncher(
++	projectFolder: string,
++	dartBinary: string,
++	dnSdkPath: string,
++	pubCache: string,
++): McpLaunch {
++	const launcherDir = path.join(projectFolder, ".dart_tool");
++	fs.mkdirSync(launcherDir, { recursive: true });
++
++	if (isWin) {
++		const launcherPath = path.join(launcherDir, "mcp.bin.cmd");
++		const content = [
++			"@echo off",
++			"REM Generated by DartNative: Install MCP Server. Do not edit.",
++			`set "PUB_CACHE=${pubCache}"`,
++			`${cmdQuote(dartBinary)} pub global run ${packageName} --dn-sdk ${cmdQuote(dnSdkPath)} --enable cli %*`,
++			"",
++		].join("\r\n");
++		fs.writeFileSync(launcherPath, content);
++		// A .cmd file cannot be spawned directly on Windows, so route it through
++		// the command interpreter.
++		return {
++			command: process.env.ComSpec || "cmd.exe",
++			args: ["/c", launcherPath],
++		};
++	}
++
++	const launcherPath = path.join(launcherDir, "mcp.bin");
++	const content = [
++		"#!/bin/sh",
++		"# Generated by DartNative: Install MCP Server. Do not edit.",
++		`PUB_CACHE=${shQuote(pubCache)}`,
++		"export PUB_CACHE",
++		`exec ${shQuote(dartBinary)} pub global run ${packageName} --dn-sdk ${shQuote(dnSdkPath)} --enable cli "$@"`,
++		"",
++	].join("\n");
++	fs.writeFileSync(launcherPath, content);
++	fs.chmodSync(launcherPath, 0o755);
++	return { command: launcherPath, args: [] };
++}
++
++function shQuote(value: string): string {
++	return `'${value.replace(/'/g, "'\\''")}'`;
++}
++
++function cmdQuote(value: string): string {
++	return `"${value.replace(/"/g, '""')}"`;
++}
++
++/**
++ * Finds the globally activated `dartnative_mcp` package so its skill can be
++ * copied into the project.
++ */
++function findInstalledPackagePath(
++	pubCache: string,
++	logger: Logger,
++): string | undefined {
++	const packageConfigPath = path.join(
++		pubCache,
++		"global_packages",
++		packageName,
++		".dart_tool",
++		"package_config.json",
++	);
++	if (!fs.existsSync(packageConfigPath)) {
++		logger.warn(
++			`Could not find ${packageConfigPath}; the agent skill was not copied.`,
++		);
++		return undefined;
++	}
++
++	try {
++		const packageConfig = JSON.parse(fs.readFileSync(packageConfigPath, "utf8")) as {
++			packages?: Array<{ name?: string; rootUri?: string }>;
++		};
++		const packageEntry = packageConfig.packages?.find((p) => p.name === packageName);
++		if (!packageEntry?.rootUri) {
++			logger.warn(
++				`${packageConfigPath} does not contain a ${packageName} entry; the agent skill was not copied.`,
++			);
++			return undefined;
++		}
++
++		const packagePath = fsPath(vs.Uri.parse(packageEntry.rootUri));
++		if (!fs.existsSync(packagePath)) {
++			logger.warn(
++				`The activated ${packageName} package was not found at ${packagePath}; the agent skill was not copied.`,
++			);
++			return undefined;
++		}
++		return packagePath;
++	} catch (e) {
++		logger.warn(`Failed to read ${packageConfigPath}: ${e}`);
++		return undefined;
++	}
++}
++
++function copySkill(
++	logger: Logger,
++	packagePath: string,
++	folder: string,
++	selectedIdeIds: Set<string>,
++): string[] {
++	const skillSource = path.join(packagePath, "skills", skillName, "SKILL.md");
++	if (!fs.existsSync(skillSource)) {
++		logger.warn(`Skill file not found at ${skillSource}; skipping.`);
++		return [];
++	}
++
++	const copied: string[] = [];
++	for (const { target, ideIds } of skillTargetMap) {
++		if (!ideIds.some((id) => selectedIdeIds.has(id)))
++			continue;
++		const targetDir = path.join(folder, target);
++		fs.mkdirSync(targetDir, { recursive: true });
++		fs.copyFileSync(skillSource, path.join(targetDir, "SKILL.md"));
++		copied.push(target);
++	}
++	return copied;
++}
++
++function writeMcpConfigs(folder: string, launch: McpLaunch, selectedIdeIds: Set<string>): string[] {
++	const written: string[] = [];
++	const writtenPaths = new Set<string>();
++
++	const write = (
++		relativePath: string,
++		update: (json: Record<string, any>) => void,
++	): void => {
++		if (writtenPaths.has(relativePath))
++			return;
++		writtenPaths.add(relativePath);
++		const file = path.join(folder, relativePath);
++		let json: Record<string, any> = {};
++		if (fs.existsSync(file)) {
++			try {
++				json = JSON.parse(fs.readFileSync(file, "utf8"));
++			} catch {
++				void vs.window.showWarningMessage(
++					`Skipped ${relativePath} because it is not valid JSON.`,
++				);
++				return;
++			}
++		}
++		update(json);
++		fs.mkdirSync(path.dirname(file), { recursive: true });
++		fs.writeFileSync(file, `${JSON.stringify(json, undefined, 2)}\n`);
++		written.push(relativePath);
++	};
++
++	for (const ide of ideTargets.filter((item) => selectedIdeIds.has(item.id))) {
++		if (ide.format === "vscode") {
++			write(ide.configPath, (json) => {
++				json.servers ??= {};
++				json.servers[serverName] = {
++					type: "stdio",
++					command: launch.command,
++					args: launch.args,
++				};
++			});
++		} else if (ide.format === "opencode") {
++			write(ide.configPath, (json) => {
++				json.mcp ??= {};
++				json.mcp[serverName] = {
++					type: "local",
++					command: [launch.command, ...launch.args],
++					enabled: true,
++				};
++			});
++		} else {
++			write(ide.configPath, (json) => {
++				json.mcpServers ??= {};
++				json.mcpServers[serverName] = {
++					command: launch.command,
++					args: launch.args,
++				};
++			});
++		}
++	}
++
++	return written;
++}
 diff --git a/src/extension/commands/packages.ts b/src/extension/commands/packages.ts
 index d1940504..93ddc011 100644
 --- a/src/extension/commands/packages.ts
@@ -4092,7 +4634,7 @@ index 00000000..abe463e6
 +	}
 +}
 diff --git a/src/extension/config.ts b/src/extension/config.ts
-index 71877abe..a15d4872 100644
+index 71877abe..e90071cc 100644
 --- a/src/extension/config.ts
 +++ b/src/extension/config.ts
 @@ -1,3 +1,4 @@
@@ -4205,7 +4747,7 @@ index 71877abe..a15d4872 100644
  	}
  
  	get addSdkToTerminalPath(): boolean { return this.getConfig<boolean>("addSdkToTerminalPath", true); }
-@@ -106,6 +151,10 @@ class Config {
+@@ -106,10 +151,17 @@ class Config {
  	get enableSdkFormatter(): boolean { return this.getConfig<boolean>("enableSdkFormatter", true); }
  	get enableServerSnippets(): boolean { return this.getConfig<boolean>("enableServerSnippets", true); }
  	get enableSnippets(): boolean { return this.getConfig<boolean>("enableSnippets", true); }
@@ -4216,7 +4758,14 @@ index 71877abe..a15d4872 100644
  	get env(): object { return this.getConfig<object>("env", {}); }
  	get evaluateToStringInDebugViews(): boolean { return this.getConfig<boolean>("evaluateToStringInDebugViews", true); }
  
-@@ -142,7 +191,12 @@ class Config {
+ 	get mcpServer(): boolean { return this.getConfig<boolean>("mcpServer", true); }
++	get mcpServerGitUrl(): string { return this.getConfig<string>("mcpServerGitUrl", "https://github.com/crazidev/dartnative_mcp"); }
++	get mcpServerGitRef(): string { return this.getConfig<string>("mcpServerGitRef", "main"); }
++	get mcpServerPackagePath(): undefined | string { return this.getConfig<null | string>("mcpServerPackagePath", null) ?? undefined; }
+ 	get mcpServerLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("mcpServerLogFile", null)))); }
+ 	// eslint-disable-next-line camelcase
+ 	get mcpServerTools(): Record<string, boolean> { return this.getConfig<Record<string, boolean>>("mcpServerTools", {/* defaults from package.json */ }); }
+@@ -142,7 +194,12 @@ class Config {
  	}
  	get flutterRememberSelectedDevice(): boolean { return this.getConfig<boolean>("flutterRememberSelectedDevice", true); }
  	get flutterScreenshotPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterScreenshotPath", null)); }
@@ -4230,7 +4779,7 @@ index 71877abe..a15d4872 100644
  	get flutterSdkPaths(): string[] { return this.getConfig<string[]>("flutterSdkPaths", []).map(resolvePaths); }
  	get flutterSelectDeviceWhenConnected(): boolean { return this.getConfig<boolean>("flutterSelectDeviceWhenConnected", true); }
  	get flutterShowEmulators(): "local" | "always" | "never" { return this.getConfig<"local" | "always" | "never">("flutterShowEmulators", "local"); }
-@@ -222,7 +276,26 @@ class Config {
+@@ -222,7 +279,26 @@ class Config {
  		return this.hasExplicitSetting("showTodos");
  	}
  
@@ -4257,7 +4806,7 @@ index 71877abe..a15d4872 100644
  	public setShowDebuggerNumbersAsHex(value: true | undefined): Promise<void> { return this.setConfig("showDebuggerNumbersAsHex", value, ConfigurationTarget.Global); }
  	public setCheckForSdkUpdates(value: boolean): Promise<void> { return this.setConfig("checkForSdkUpdates", value, ConfigurationTarget.Global); }
  	public setFlutterCreateOrganization(value: string | undefined): Promise<void> { return this.setConfig("flutterCreateOrganization", value, ConfigurationTarget.Global); }
-@@ -231,10 +304,12 @@ class Config {
+@@ -231,10 +307,12 @@ class Config {
  	public setFlutterCreatePlatforms(value: string[] | undefined): Promise<void> { return this.setConfig("flutterCreatePlatforms", value, ConfigurationTarget.Global); }
  	public setFlutterCreatePromptForPlatforms(value: boolean | undefined): Promise<void> { return this.setConfig("flutterCreatePromptForPlatforms", value, ConfigurationTarget.Global); }
  	public setFlutterSdkPath(value: string | undefined, target: ConfigurationTarget): Promise<void> { return this.setConfig("flutterSdkPath", value, target); }
@@ -4270,7 +4819,7 @@ index 71877abe..a15d4872 100644
  	public setOffline(value: boolean | undefined): Promise<void> { return this.setConfig("offline", value, ConfigurationTarget.Global); }
  	public setOpenDevTools(value: "never" | "flutter" | "always" | undefined): Promise<void> { return this.setConfig("openDevTools", value, ConfigurationTarget.Global); }
  	public setShowInspectorNotificationsForWidgetErrors(value: boolean): Promise<void> { return this.setConfig("showInspectorNotificationsForWidgetErrors", value, ConfigurationTarget.Global); }
-@@ -260,24 +335,49 @@ class ResolvedConfig {
+@@ -260,24 +338,49 @@ class ResolvedConfig {
  	private readonly dartConfig = workspace.getConfiguration("", this.dummyDartFile).get("[dart]") as any;
  
  	public getAppliedConfig<T>(section: string, key: string, isResourceScoped = true): T | undefined {
@@ -4325,7 +4874,7 @@ index 71877abe..a15d4872 100644
  	}
  
  	get analysisExcludedFolders(): string[] { return this.getConfig<string[]>("analysisExcludedFolders", []); }
-@@ -303,6 +403,13 @@ export class ResourceConfig {
+@@ -303,6 +406,13 @@ export class ResourceConfig {
  	get flutterSdkPath(): undefined | string { return resolvePaths(this.getConfig<null | string>("flutterSdkPath", null)); }
  	get flutterSdkPaths(): string[] { return this.getConfig<string[]>("flutterSdkPaths", []).map(resolvePaths); }
  	get flutterTestAdditionalArgs(): string[] { return this.getConfig<string[]>("flutterTestAdditionalArgs", []); }
@@ -4339,7 +4888,7 @@ index 71877abe..a15d4872 100644
  	get hotReloadPatterns(): string[] { return this.getConfig<string[]>("hotReloadPatterns", []); }
  	get insertArgumentPlaceholders(): boolean { return this.getConfig<boolean>("insertArgumentPlaceholders", true); }
  	get lineLength(): number { return this.getConfig<number>("lineLength", 80); }
-@@ -325,6 +432,7 @@ export class ResourceConfig {
+@@ -325,6 +435,7 @@ export class ResourceConfig {
  	get toolingDaemonLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("toolingDaemonLogFile", null)))); }
  	get vmAdditionalArgs(): string[] { return this.getConfig<string[]>("vmAdditionalArgs", []); }
  	get webDaemonLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("webDaemonLogFile", null)))); }
@@ -4774,7 +5323,7 @@ index 00000000..2394bef5
 +	}
 +}
 diff --git a/src/extension/extension.ts b/src/extension/extension.ts
-index 4bc3697d..3d361528 100644
+index 4bc3697d..b22e1329 100644
 --- a/src/extension/extension.ts
 +++ b/src/extension/extension.ts
 @@ -1,10 +1,11 @@
@@ -4790,7 +5339,13 @@ index 4bc3697d..3d361528 100644
  import { DART_PLATFORM_NAME, DART_PROJECT_LOADED, FLUTTER_PROJECT_LOADED, FLUTTER_PROPERTY_EDITOR_SUPPORTED_CONTEXT, FLUTTER_SUPPORTS_ATTACH, GO_TO_IMPORTS_SUPPORTED_CONTEXT, IS_RUNNING_LOCALLY_CONTEXT, OBSERVATORY_SUPPORTED_CONTEXT, PROJECT_LOADED, SDK_IS_PRE_RELEASE, WEB_PROJECT_LOADED } from "../shared/constants.contexts";
  import { LogCategory } from "../shared/enums";
  import { WebClient } from "../shared/fetch";
-@@ -52,6 +53,7 @@ import { PackageCommands } from "./commands/packages";
+@@ -47,11 +48,13 @@ import { DebugCommands, debugSessions } from "./commands/debug";
+ import { EditCommands } from "./commands/edit";
+ import { FlutterCommands } from "./commands/flutter";
+ import { LoggingCommands } from "./commands/logging";
++import { installMcpServerCommand } from "./commands/mcp";
+ import { OpenInOtherEditorCommands } from "./commands/open_in_other_editors";
+ import { PackageCommands } from "./commands/packages";
  import { SdkCommands } from "./commands/sdk";
  import { SettingsCommands } from "./commands/settings";
  import { TestCommands, isInImplementationFileThatCanHaveTest, isInTestFileThatHasImplementation } from "./commands/test";
@@ -4798,7 +5353,7 @@ index 4bc3697d..3d361528 100644
  import { config } from "./config";
  import { DartTaskProvider } from "./dart/dart_task_provider";
  import { HotReloadOnSaveHandler } from "./dart/hot_reload_save_handler";
-@@ -82,6 +84,7 @@ import { DartDebugAdapterRemoveErrorShowUserFactory } from "./providers/debug_ad
+@@ -82,6 +85,7 @@ import { DartDebugAdapterRemoveErrorShowUserFactory } from "./providers/debug_ad
  import { DebugConfigProvider, DynamicDebugConfigProvider, InitialLaunchJsonDebugConfigProvider } from "./providers/debug_config_provider";
  import { DartMcpServerDefinitionProvider } from "./providers/mcp_server_definition_provider";
  import { SnippetCompletionItemProvider } from "./providers/snippet_completion_item_provider";
@@ -4806,7 +5361,7 @@ index 4bc3697d..3d361528 100644
  import { PubGlobal } from "./pub/global";
  import { ExtensionRecommentations } from "./recommendations/recommendations";
  import { DevToolsManager } from "./sdk/dev_tools/manager";
-@@ -93,11 +96,12 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
+@@ -93,11 +97,12 @@ import { handleNewProjects, showUserPrompts } from "./user_prompts";
  import * as util from "./utils";
  import { promptToReloadExtension } from "./utils";
  import { addToLogHeader, clearLogHeader, getExtensionLogPath, getLogHeader } from "./utils/log";
@@ -4820,7 +5375,7 @@ index 4bc3697d..3d361528 100644
  
  let maybeAnalyzer: LspAnalyzer | undefined;
  let flutterDaemon: IFlutterDaemon | undefined;
-@@ -141,6 +145,7 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -141,6 +146,7 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	// Clear any caches, for example projects that we detected. We might be reloading because
  	// a Flutter project was added to a Dart-only workspace.
  	clearCaches();
@@ -4828,7 +5383,7 @@ index 4bc3697d..3d361528 100644
  
  	void vs.commands.executeCommand("setContext", IS_RUNNING_LOCALLY_CONTEXT, isRunningLocally);
  	buildLogHeaders();
-@@ -162,6 +167,19 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -162,6 +168,20 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  		logger.info("Done reloading extension!");
  	}));
  
@@ -4837,6 +5392,7 @@ index 4bc3697d..3d361528 100644
 +	// Commands that must be available unconditionally, even before SDKs are found or if SDKs are missing.
 +	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
 +	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, workspaceContextHolder.current?.sdks)));
++	context.subscriptions.push(vs.commands.registerCommand("dartnative.installMcpServer", () => installMcpServerCommand(logger, workspaceContextHolder.current?.sdks)));
 +	context.subscriptions.push(vs.commands.registerCommand("_dart.formatDocument", async () => {
 +		try {
 +			await vs.commands.executeCommand("editor.action.formatDocument");
@@ -4848,7 +5404,7 @@ index 4bc3697d..3d361528 100644
  	// Configure if using flutter-dev.
  	setFlutterDev(config.useFlutterDev);
  
-@@ -171,19 +189,31 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -171,19 +191,31 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	analytics = new Analytics(logger);
  
  	// Helper to set the tool env using current analytics/env settings.
@@ -4882,7 +5438,7 @@ index 4bc3697d..3d361528 100644
  	extensionApiModel.setSdks(workspaceContextUnverified.sdks);
  	analytics.workspaceContext = workspaceContextUnverified;
  	setEnvHelper(); // analytics.workspaceContext could affect suppression.
-@@ -196,10 +226,38 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -196,10 +228,38 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	setupLog(config.toolingDaemonLogFile, LogCategory.DartToolingDaemon);
  	setupLog(config.devToolsLogFile, LogCategory.DevTools);
  
@@ -4923,7 +5479,7 @@ index 4bc3697d..3d361528 100644
  	}
  
  	const workspaceContext = workspaceContextUnverified as DartWorkspaceContext;
-@@ -211,9 +269,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -211,9 +271,13 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	void vs.commands.executeCommand("setContext", SDK_IS_PRE_RELEASE, sdks.isPreReleaseSdk);
  
  
@@ -4938,7 +5494,7 @@ index 4bc3697d..3d361528 100644
  		setEnvHelper(); // Update
  	}
  
-@@ -229,15 +291,39 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -229,15 +293,39 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  		const baseSdk = workspaceContext.hasAnyFlutterProjects
  			? sdks.flutter
  			: sdks.dart;
@@ -4981,7 +5537,7 @@ index 4bc3697d..3d361528 100644
  	// TODO: Move these capabilities into WorkspaceContext.
  	if (sdks.dartVersion) {
  		dartCapabilities.version = sdks.dartVersion;
-@@ -454,6 +540,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
+@@ -454,6 +542,12 @@ export async function activate(context: vs.ExtensionContext, isRestart = false)
  	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/dart.json", () => true)));
  	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider(dartCapabilities, "snippets/flutter.json", (uri) => util.isInsideFlutterProject(uri))));
  
@@ -4994,7 +5550,7 @@ index 4bc3697d..3d361528 100644
  	context.subscriptions.push(DartLanguageConfiguration.register(DART_LANGUAGE));
  
  	context.subscriptions.push(new FileChangeWarnings());
-@@ -909,7 +1001,7 @@ export async function deactivate(isRestart = false, reason: ExtensionRestartReas
+@@ -909,7 +1003,7 @@ export async function deactivate(isRestart = false, reason: ExtensionRestartReas
  function setCommandVisiblity(enable: boolean, workspaceContext?: WorkspaceContext) {
  	void vs.commands.executeCommand("setContext", PROJECT_LOADED, enable);
  	void vs.commands.executeCommand("setContext", DART_PROJECT_LOADED, enable && workspaceContext?.hasAnyStandardDartProjects);
@@ -5210,6 +5766,66 @@ index 280fe788..105e8b0a 100644
 +			this.addArgsIfNotExist(args, ...getGlobalFlutterArgs());
  		this.addArgsIfNotExist(args, ...conf.flutterAdditionalArgs);
  		this.addArgsIfNotExist(args, ...conf.flutterTestAdditionalArgs);
+ 
+diff --git a/src/extension/providers/mcp_server_definition_provider.ts b/src/extension/providers/mcp_server_definition_provider.ts
+index 1a04b6b6..e77c8588 100644
+--- a/src/extension/providers/mcp_server_definition_provider.ts
++++ b/src/extension/providers/mcp_server_definition_provider.ts
+@@ -8,15 +8,31 @@ import { config } from "../config";
+ import { getToolEnv } from "../utils/processes";
+ 
+ export class DartMcpServerDefinitionProvider implements vs.McpServerDefinitionProvider, IAmDisposable {
++	// Flutter-only tools from the SDK MCP server. These rely on Flutter
++	// tooling that is not available in DartNative projects, so never expose
++	// them. DartNative equivalents are provided by the `dn_*` tools.
++	private readonly unsupportedDartNativeTools = [
++		"flutter_driver_command",
++		"get_app_logs",
++		"get_selected_widget",
++		"get_widget_tree",
++		"launch_app",
++		"list_devices",
++		"list_running_apps",
++		"set_widget_selection_mode",
++		"stop_app",
++	];
++
+ 	private readonly disposables: IAmDisposable[] = [];
+ 
+ 	private onDidChangeMcpServerDefinitionsEmitter: vs.EventEmitter<void> = new vs.EventEmitter<void>();
+ 	public readonly onDidChangeMcpServerDefinitions: vs.Event<void> = this.onDidChangeMcpServerDefinitionsEmitter.event;
+ 
+ 	constructor(private readonly sdks: DartSdks, private readonly dartCapabilities: DartCapabilities) {
+-		// Inform VS Code the MCP Server list changed if the experiment flag changes.
++		const mcpSettings = ["mcpServer", "mcpServerLogFile", "mcpServerTools"];
++		// Inform VS Code the MCP server list changed when its settings change.
+ 		this.disposables.push(vs.workspace.onDidChangeConfiguration((e) => {
+-			if (e.affectsConfiguration("dart.mcpServer") || e.affectsConfiguration("dart.mcpServerLogFile") || e.affectsConfiguration("dart.mcpServerTools")) {
++			if (mcpSettings.some((setting) => e.affectsConfiguration(`dartnative.${setting}`) || e.affectsConfiguration(`dart.${setting}`))) {
+ 				this.onDidChangeMcpServerDefinitionsEmitter.fire();
+ 			}
+ 		}));
+@@ -41,17 +57,19 @@ export class DartMcpServerDefinitionProvider implements vs.McpServerDefinitionPr
+ 		if (config.mcpServerLogFile && this.dartCapabilities.supportsMcpServerLogFile)
+ 			args.push("--log-file", config.mcpServerLogFile);
+ 
+-		// Add exclude-tool flags if supported and configured (tools set to false are excluded)
++		// Add exclude-tool flags if supported and configured (tools set to false are excluded).
+ 		if (this.dartCapabilities.supportsMcpServerExcludeTool) {
+ 			const tools: Record<string, boolean> = config.mcpServerTools ?? {};
+ 			for (const [toolName, enabled] of Object.entries(tools)) {
+ 				if (!enabled)
+ 					args.push("--exclude-tool", toolName);
+ 			}
++			for (const toolName of this.unsupportedDartNativeTools)
++				args.push("--exclude-tool", toolName);
+ 		}
+ 
+ 		return [
+-			new vs.McpStdioServerDefinition("Dart SDK MCP Server", binPath, args, getToolEnv()),
++			new vs.McpStdioServerDefinition("DartNative SDK MCP Server", binPath, args, getToolEnv()),
+ 		];
+ 	}
  
 diff --git a/src/extension/providers/snippet_completion_item_provider.ts b/src/extension/providers/snippet_completion_item_provider.ts
 index d2813240..3ed290f6 100644
@@ -8079,6 +8695,132 @@ index cea98434..e85cf402 100644
  	) {
  		this.workspaceTypeDescription = this.buildWorkspaceTypeDescription();
  	}
+diff --git a/src/test/dart/mcp_server.test.ts b/src/test/dart/mcp_server.test.ts
+index 5bcf74a1..d2ba6797 100644
+--- a/src/test/dart/mcp_server.test.ts
++++ b/src/test/dart/mcp_server.test.ts
+@@ -6,9 +6,11 @@ import { activate, activateWithoutAnalysis, closeAllOpenFiles, currentDoc, empty
+ describe("MCP server", () => {
+ 	let originalCapabilitiesVersion: string;
+ 
+-	beforeEach(async () => {
++	beforeEach(async function () {
+ 		await activateWithoutAnalysis(null);
+ 		originalCapabilitiesVersion = privateApi.dartCapabilities.version;
++		if (!privateApi.mcpServerProvider)
++			this.skip();
+ 	});
+ 
+ 	afterEach(() => {
+@@ -39,13 +41,27 @@ describe("MCP server", () => {
+ 		ensureExpectedEnvVariables(server.env);
+ 	});
+ 
+-	it("passes --exclude-tool for run_tests by default", async () => {
++	it("excludes the default DartNative tools", async () => {
+ 		privateApi.dartCapabilities.version = "3.10.0";
+ 
+ 		const provider = privateApi.mcpServerProvider!;
+ 		const servers = await provider.provideMcpServerDefinitions(new vs.CancellationTokenSource().token);
+ 		const excludedTools = getExcludedTools(servers![0]);
+-		assert.deepStrictEqual(excludedTools, ["analyze_files", "dart_fix", "dart_format", "run_tests"]);
++		assert.deepStrictEqual(excludedTools, [
++			"analyze_files",
++			"dart_fix",
++			"dart_format",
++			"run_tests",
++			"flutter_driver_command",
++			"get_app_logs",
++			"get_selected_widget",
++			"get_widget_tree",
++			"launch_app",
++			"list_devices",
++			"list_running_apps",
++			"set_widget_selection_mode",
++			"stop_app",
++		]);
+ 	});
+ 
+ 	it("merges excluded tools with defaults", async () => {
+@@ -56,7 +72,22 @@ describe("MCP server", () => {
+ 		const provider = privateApi.mcpServerProvider!;
+ 		const servers = await provider.provideMcpServerDefinitions(new vs.CancellationTokenSource().token);
+ 		const excludedTools = getExcludedTools(servers![0]);
+-		assert.deepStrictEqual(excludedTools, ["analyze_files", "dart_fix", "dart_format", "run_tests", "tool1"]);
++		assert.deepStrictEqual(excludedTools, [
++			"analyze_files",
++			"dart_fix",
++			"dart_format",
++			"run_tests",
++			"tool1",
++			"flutter_driver_command",
++			"get_app_logs",
++			"get_selected_widget",
++			"get_widget_tree",
++			"launch_app",
++			"list_devices",
++			"list_running_apps",
++			"set_widget_selection_mode",
++			"stop_app",
++		]);
+ 	});
+ 
+ 	it("allows default exclusions to be included", async () => {
+@@ -68,7 +99,21 @@ describe("MCP server", () => {
+ 		const provider = privateApi.mcpServerProvider!;
+ 		const servers = await provider.provideMcpServerDefinitions(new vs.CancellationTokenSource().token);
+ 		const excludedTools = getExcludedTools(servers![0]);
+-		assert.deepStrictEqual(excludedTools, ["analyze_files", "dart_fix", "dart_format", "tool1"]);
++		assert.deepStrictEqual(excludedTools, [
++			"analyze_files",
++			"dart_fix",
++			"dart_format",
++			"tool1",
++			"flutter_driver_command",
++			"get_app_logs",
++			"get_selected_widget",
++			"get_widget_tree",
++			"launch_app",
++			"list_devices",
++			"list_running_apps",
++			"set_widget_selection_mode",
++			"stop_app",
++		]);
+ 	});
+ 
+ 	it("does not pass --exclude-tool when unsupported", async () => {
+@@ -79,10 +124,30 @@ describe("MCP server", () => {
+ 		const excludedTools = getExcludedTools(servers![0]);
+ 		assert.deepStrictEqual(excludedTools, []);
+ 	});
++
++	it("refreshes server definitions when DartNative MCP settings change", async () => {
++		const provider = privateApi.mcpServerProvider!;
++		const onDidChangeMcpServerDefinitions = provider.onDidChangeMcpServerDefinitions;
++		assert.ok(onDidChangeMcpServerDefinitions);
++		let changeCount = 0;
++		const subscription = onDidChangeMcpServerDefinitions(() => changeCount++);
++
++		await setConfigForTest("dartnative", "mcpServer", false);
++		await setConfigForTest("dartnative", "mcpServerLogFile", "/tmp/dart-mcp-server.log");
++		// eslint-disable-next-line camelcase
++		await setConfigForTest("dartnative", "mcpServerTools", { run_tests: true });
++
++		subscription.dispose();
++		assert.equal(changeCount, 3);
++	});
+ });
+ 
+ describe("MCP tools", () => {
+-	beforeEach(async () => activate(null));
++	beforeEach(async function () {
++		await activate(null);
++		if (typeof vs.lm?.invokeTool !== "function")
++			this.skip();
++	});
+ 
+ 	it("dart_format invokes editor.action.formatDocument", async () => {
+ 		await closeAllOpenFiles();
 diff --git a/src/test/dart/utils/sdk.test.ts b/src/test/dart/utils/sdk.test.ts
 index 681c1b1d..d63730e3 100644
 --- a/src/test/dart/utils/sdk.test.ts
@@ -9284,17 +10026,31 @@ index f4dbb6ec..8f96b050 100644
  		"src/extension",
  		"src/test/test_projects"
 diff --git a/tsconfig.json b/tsconfig.json
-index 78bbc2de..d14eccb0 100644
+index 78bbc2de..4cb977bb 100644
 --- a/tsconfig.json
 +++ b/tsconfig.json
-@@ -24,6 +24,7 @@
+@@ -16,6 +16,9 @@
+ 			"node"
+ 		]
+ 	},
++	"include": [
++		"src/**/*"
++	],
+ 	"exclude": [
+ 		".crash_dumps",
+ 		".dart_code_test_data_dir",
+@@ -24,7 +27,10 @@
  		".vscode-test",
  		"node_modules",
  		"out",
+-		"src/test/test_projects"
 +		"scripts",
- 		"src/test/test_projects"
++		"src/test/test_projects",
++		"website",
++		"landing"
  		// tsconfig.build.json excludes additional paths
  	]
+ }
 diff --git a/tsconfig.scripts.json b/tsconfig.scripts.json
 new file mode 100644
 index 00000000..09c9e095

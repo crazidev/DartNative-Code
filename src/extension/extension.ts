@@ -48,6 +48,7 @@ import { DebugCommands, debugSessions } from "./commands/debug";
 import { EditCommands } from "./commands/edit";
 import { FlutterCommands } from "./commands/flutter";
 import { LoggingCommands } from "./commands/logging";
+import { installMcpServerCommand } from "./commands/mcp";
 import { OpenInOtherEditorCommands } from "./commands/open_in_other_editors";
 import { PackageCommands } from "./commands/packages";
 import { SdkCommands } from "./commands/sdk";
@@ -172,6 +173,7 @@ export async function activate(context: vs.ExtensionContext, isRestart = false) 
 	// Commands that must be available unconditionally, even before SDKs are found or if SDKs are missing.
 	context.subscriptions.push(vs.commands.registerCommand("dart.locateDartNativeSdk", () => pickDartNativeSdkFolder(logger)));
 	context.subscriptions.push(vs.commands.registerCommand("dart.setDartNativeLicenseKey", () => setDartNativeLicenseKeyCommand(logger, workspaceContextHolder.current?.sdks)));
+	context.subscriptions.push(vs.commands.registerCommand("dartnative.installMcpServer", () => installMcpServerCommand(logger, workspaceContextHolder.current?.sdks)));
 	context.subscriptions.push(vs.commands.registerCommand("_dart.formatDocument", async () => {
 		try {
 			await vs.commands.executeCommand("editor.action.formatDocument");

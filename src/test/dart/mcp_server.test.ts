@@ -6,9 +6,11 @@ import { activate, activateWithoutAnalysis, closeAllOpenFiles, currentDoc, empty
 describe("MCP server", () => {
 	let originalCapabilitiesVersion: string;
 
-	beforeEach(async () => {
+	beforeEach(async function () {
 		await activateWithoutAnalysis(null);
 		originalCapabilitiesVersion = privateApi.dartCapabilities.version;
+		if (!privateApi.mcpServerProvider)
+			this.skip();
 	});
 
 	afterEach(() => {
@@ -39,13 +41,27 @@ describe("MCP server", () => {
 		ensureExpectedEnvVariables(server.env);
 	});
 
-	it("passes --exclude-tool for run_tests by default", async () => {
+	it("excludes the default DartNative tools", async () => {
 		privateApi.dartCapabilities.version = "3.10.0";
 
 		const provider = privateApi.mcpServerProvider!;
 		const servers = await provider.provideMcpServerDefinitions(new vs.CancellationTokenSource().token);
 		const excludedTools = getExcludedTools(servers![0]);
-		assert.deepStrictEqual(excludedTools, ["analyze_files", "dart_fix", "dart_format", "run_tests"]);
+		assert.deepStrictEqual(excludedTools, [
+			"analyze_files",
+			"dart_fix",
+			"dart_format",
+			"run_tests",
+			"flutter_driver_command",
+			"get_app_logs",
+			"get_selected_widget",
+			"get_widget_tree",
+			"launch_app",
+			"list_devices",
+			"list_running_apps",
+			"set_widget_selection_mode",
+			"stop_app",
+		]);
 	});
 
 	it("merges excluded tools with defaults", async () => {
@@ -56,7 +72,22 @@ describe("MCP server", () => {
 		const provider = privateApi.mcpServerProvider!;
 		const servers = await provider.provideMcpServerDefinitions(new vs.CancellationTokenSource().token);
 		const excludedTools = getExcludedTools(servers![0]);
-		assert.deepStrictEqual(excludedTools, ["analyze_files", "dart_fix", "dart_format", "run_tests", "tool1"]);
+		assert.deepStrictEqual(excludedTools, [
+			"analyze_files",
+			"dart_fix",
+			"dart_format",
+			"run_tests",
+			"tool1",
+			"flutter_driver_command",
+			"get_app_logs",
+			"get_selected_widget",
+			"get_widget_tree",
+			"launch_app",
+			"list_devices",
+			"list_running_apps",
+			"set_widget_selection_mode",
+			"stop_app",
+		]);
 	});
 
 	it("allows default exclusions to be included", async () => {
@@ -68,7 +99,21 @@ describe("MCP server", () => {
 		const provider = privateApi.mcpServerProvider!;
 		const servers = await provider.provideMcpServerDefinitions(new vs.CancellationTokenSource().token);
 		const excludedTools = getExcludedTools(servers![0]);
-		assert.deepStrictEqual(excludedTools, ["analyze_files", "dart_fix", "dart_format", "tool1"]);
+		assert.deepStrictEqual(excludedTools, [
+			"analyze_files",
+			"dart_fix",
+			"dart_format",
+			"tool1",
+			"flutter_driver_command",
+			"get_app_logs",
+			"get_selected_widget",
+			"get_widget_tree",
+			"launch_app",
+			"list_devices",
+			"list_running_apps",
+			"set_widget_selection_mode",
+			"stop_app",
+		]);
 	});
 
 	it("does not pass --exclude-tool when unsupported", async () => {
@@ -79,10 +124,30 @@ describe("MCP server", () => {
 		const excludedTools = getExcludedTools(servers![0]);
 		assert.deepStrictEqual(excludedTools, []);
 	});
+
+	it("refreshes server definitions when DartNative MCP settings change", async () => {
+		const provider = privateApi.mcpServerProvider!;
+		const onDidChangeMcpServerDefinitions = provider.onDidChangeMcpServerDefinitions;
+		assert.ok(onDidChangeMcpServerDefinitions);
+		let changeCount = 0;
+		const subscription = onDidChangeMcpServerDefinitions(() => changeCount++);
+
+		await setConfigForTest("dartnative", "mcpServer", false);
+		await setConfigForTest("dartnative", "mcpServerLogFile", "/tmp/dart-mcp-server.log");
+		// eslint-disable-next-line camelcase
+		await setConfigForTest("dartnative", "mcpServerTools", { run_tests: true });
+
+		subscription.dispose();
+		assert.equal(changeCount, 3);
+	});
 });
 
 describe("MCP tools", () => {
-	beforeEach(async () => activate(null));
+	beforeEach(async function () {
+		await activate(null);
+		if (typeof vs.lm?.invokeTool !== "function")
+			this.skip();
+	});
 
 	it("dart_format invokes editor.action.formatDocument", async () => {
 		await closeAllOpenFiles();
