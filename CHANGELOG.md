@@ -2,6 +2,11 @@
 
 All notable changes to the "dartnative" extension will be documented in this file.
 
+## [3.145.1] - 2026-11-02
+
+### Fixed
+- The update prompt now opens the GitHub releases page for release information.
+
 ## [3.145.0] - 2026-11-02
 
 ### Added

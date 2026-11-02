@@ -32,12 +32,6 @@ jobs:
       - name: Install vsce
         run: npm install -g @vscode/vsce
 
-      - name: Set up icon submodule
-        run: |
-          git submodule init
-          git submodule update
-        shell: bash
-
       - name: npm install
         run: npm install
 
@@ -46,6 +40,9 @@ jobs:
 
       - name: npm build (production)
         run: npm run build -- --mode production
+
+      # Do not initialize media/doc-icons here: local VSIX packaging leaves it
+      # uninitialized, and the submodule adds over 10,000 image files.
 
       # -------------------------------------------------------------------
       # Determine the release version
