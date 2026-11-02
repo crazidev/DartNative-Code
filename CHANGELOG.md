@@ -4,17 +4,13 @@ All notable changes to the "dartnative" extension will be documented in this fil
 
 ## [3.145.1] - 2026-11-02
 
-### Fixed
-- The update prompt now opens the GitHub releases page for release information.
-
-## [3.145.0] - 2026-11-02
-
 ### Added
 - **Pub package links**: Clicking a package in `pubspec.yaml` now opens its correct package page on `dartpub.dev` or `pub.dev`.
 - **MCP installer improvements**: Use a DartNative-specific launcher and copy complete agent skill directories, including supporting files.
 - **Widget extraction improvements**: Infer closure-local collection entry types, extract private State and `widget.` members safely, and target the selected collection-if branch.
 
 ### Fixed
+- The update prompt now opens the GitHub releases page for release information.
 - Prevented invalid extracted widget field types for closure values such as `entry.value` and booleans derived from local variables.
 
 ## [3.144.0-dev] - 2026-09-13
