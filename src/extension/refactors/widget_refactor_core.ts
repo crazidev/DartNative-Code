@@ -180,7 +180,7 @@ export class DartCodeScanner {
 	public findAllWidgetExpressions(): Array<{ start: number; end: number; name: string; argsStart: number; argsEnd: number }> {
 		const widgets: Array<{ start: number; end: number; name: string; argsStart: number; argsEnd: number }> = [];
 		// Pattern for Identifier or Identifier.namedConstructor preceded optionally by const / new
-		const pattern = /\b(?:const\s+|new\s+)?([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*|\.[a-z][A-Za-z0-9_]*)?)\s*\(/g;
+		const pattern = /\b(?:const\s+|new\s+)?(_?[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*|\.[a-z][A-Za-z0-9_]*)?)\s*\(/g;
 		let match: RegExpExecArray | null;
 
 		while ((match = pattern.exec(this.code)) !== null) {
@@ -219,7 +219,247 @@ export class DartCodeScanner {
 			}
 		}
 
+		// When the cursor is on a collection `if`/`else` element (the condition,
+		// the `if`/`else` keywords or the whitespace between them) there is no
+		// widget under the cursor and the innermost match is an ancestor widget
+		// such as the enclosing `Column`. Target the first widget of the active
+		// branch instead, so extracting does not pull out the whole list.
+		const branchTarget = this.findCollectionIfTarget(offset, allWidgets);
+		if (branchTarget && (!innermost || innermost.start < branchTarget.itemStart))
+			return branchTarget.widget;
+
 		return innermost;
+	}
+
+	/**
+	 * Finds the widget of the active branch of a collection `if`/`else` element
+	 * that contains the given offset.
+	 */
+	private findCollectionIfTarget(
+		offset: number,
+		widgets: Array<{ start: number; end: number; name: string; argsStart: number; argsEnd: number }>,
+	): { itemStart: number; widget: { start: number; end: number; name: string; argsStart: number; argsEnd: number } } | undefined {
+		const items = this.findCollectionIfItems();
+		let best: { start: number; end: number } | undefined;
+
+		for (const item of items) {
+			const lineStart = this.code.lastIndexOf("\n", item.start) + 1;
+			const containsOffset = (offset >= item.start && offset <= item.end) || (offset >= lineStart && offset < item.start);
+			if (!containsOffset) continue;
+			if (!best || item.start > best.start) best = item;
+		}
+
+		if (!best)
+			return undefined;
+
+		const branch = this.resolveCollectionIfBranch(best.start, best.end, offset);
+		if (!branch)
+			return undefined;
+
+		const branchStart = this.skipWhitespace(branch.start, branch.end);
+		let firstWidget: { start: number; end: number; name: string; argsStart: number; argsEnd: number } | undefined;
+		for (const widget of widgets) {
+			if (widget.start < branch.start || widget.start >= branch.end) continue;
+			if (!firstWidget || widget.start < firstWidget.start)
+				firstWidget = widget;
+		}
+
+		// Only use a widget constructor when it is the whole branch expression.
+		// Branches like `foo(Text('a'))` or `widget.trailing!` are not widget
+		// constructors themselves, so the branch expression is the target.
+		if (firstWidget?.start === branchStart)
+			return { itemStart: best.start, widget: firstWidget };
+
+		let branchEnd = branch.end;
+		while (branchEnd > branchStart && /\s/.test(this.code[branchEnd - 1])) branchEnd--;
+		if (branchEnd <= branchStart)
+			return undefined;
+
+		return {
+			itemStart: best.start,
+			widget: { argsEnd: branchStart, argsStart: branchStart, end: branchEnd, name: "widget", start: branchStart },
+		};
+	}
+
+	/**
+	 * Finds top-level `if` elements inside collection literals.
+	 */
+	private findCollectionIfItems(): Array<{ start: number; end: number }> {
+		const brackets: Array<{ open: number; close: number }> = [];
+		const stack: number[] = [];
+		let i = 0;
+
+		while (i < this.code.length) {
+			const char = this.code[i];
+			const next = this.code[i + 1] ?? "";
+
+			if (char === "/" && next === "/") {
+				i += 2;
+				while (i < this.code.length && this.code[i] !== "\n") i++;
+				continue;
+			}
+			if (char === "/" && next === "*") {
+				i += 2;
+				while (i < this.code.length && !(this.code[i] === "*" && this.code[i + 1] === "/")) i++;
+				i = Math.min(this.code.length, i + 2);
+				continue;
+			}
+			if (char === "'" || char === "\"") {
+				i = this.skipStringLiteral(i);
+				continue;
+			}
+
+			if (char === "[")
+				stack.push(i);
+			else if (char === "]") {
+				const open = stack.pop();
+				if (open !== undefined)
+					brackets.push({ close: i, open });
+			}
+			i++;
+		}
+
+		const items: Array<{ start: number; end: number }> = [];
+		for (const bracket of brackets) {
+			for (const item of this.parseListItems(bracket.open + 1, bracket.close)) {
+				if (/^if\b/.test(item.text))
+					items.push({ end: item.end, start: item.start });
+			}
+		}
+		return items;
+	}
+
+	/**
+	 * Resolves the source range of the branch selected by the cursor inside a
+	 * collection `if`/`else` element, following `else if` chains.
+	 */
+	private resolveCollectionIfBranch(itemStart: number, itemEnd: number, offset: number): { start: number; end: number } | undefined {
+		let start = itemStart;
+		const end = itemEnd;
+
+		while (start < end) {
+			const ifStart = this.skipWhitespace(start, end);
+			if (!this.code.startsWith("if", ifStart) || !/[\s(]/.test(this.code[ifStart + 2] ?? ""))
+				return undefined;
+
+			const openParen = this.code.indexOf("(", ifStart + 2);
+			if (openParen === -1 || openParen >= end)
+				return undefined;
+			const closeParen = this.findMatchingBracket(openParen);
+			if (closeParen === -1 || closeParen >= end)
+				return undefined;
+
+			const elseIndex = this.findTopLevelElse(closeParen + 1, end);
+
+			// The cursor is in the condition (or on the `if` keyword): use the
+			// then branch.
+			if (offset <= closeParen)
+				return { end: elseIndex === -1 ? end : elseIndex, start: closeParen + 1 };
+
+			// No `else` at all: the offset is in the then branch.
+			if (elseIndex === -1)
+				return { end, start: closeParen + 1 };
+
+			// The cursor is in the then branch. Whitespace on the same line as
+			// `else` (before the keyword) belongs to the else branch.
+			const elseLineStart = this.code.lastIndexOf("\n", elseIndex) + 1;
+			if (offset < elseIndex && offset < elseLineStart)
+				return { end: elseIndex, start: closeParen + 1 };
+
+			// The cursor is in the else branch, which may be another `if`.
+			const elseBranchStart = elseIndex + "else".length;
+			const nestedIf = this.skipWhitespace(elseBranchStart, end);
+			if (this.code.startsWith("if", nestedIf) && /[\s(]/.test(this.code[nestedIf + 2] ?? "")) {
+				start = nestedIf;
+				continue;
+			}
+			return { end, start: elseBranchStart };
+		}
+
+		return undefined;
+	}
+
+	/**
+	 * Finds a top-level `else` keyword, ignoring nested collections, arguments,
+	 * strings and comments.
+	 */
+	private findTopLevelElse(from: number, to: number): number {
+		let parenDepth = 0;
+		let bracketDepth = 0;
+		let braceDepth = 0;
+		let i = from;
+
+		while (i < to) {
+			const char = this.code[i];
+			const next = this.code[i + 1] ?? "";
+
+			if (char === "/" && next === "/") {
+				i += 2;
+				while (i < to && this.code[i] !== "\n") i++;
+				continue;
+			}
+			if (char === "/" && next === "*") {
+				i += 2;
+				while (i < to && !(this.code[i] === "*" && this.code[i + 1] === "/")) i++;
+				i = Math.min(to, i + 2);
+				continue;
+			}
+			if (char === "'" || char === "\"") {
+				i = this.skipStringLiteral(i);
+				continue;
+			}
+
+			if (char === "(") parenDepth++;
+			else if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
+			else if (char === "[") bracketDepth++;
+			else if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+			else if (char === "{") braceDepth++;
+			else if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
+			else if (
+				parenDepth === 0 && bracketDepth === 0 && braceDepth === 0
+				&& this.code.startsWith("else", i)
+				&& !isIdentifierPart(this.code[i - 1] ?? "")
+				&& !isIdentifierPart(this.code[i + "else".length] ?? "")
+			)
+				return i;
+
+			i++;
+		}
+
+		return -1;
+	}
+
+	/**
+	 * Skips a string literal and returns the index after its closing quote.
+	 */
+	private skipStringLiteral(start: number): number {
+		const quote = this.code[start];
+		const tripleQuoted = this.code[start + 1] === quote && this.code[start + 2] === quote;
+		const terminator = tripleQuoted ? quote.repeat(3) : quote;
+		let i = start + terminator.length;
+
+		while (i < this.code.length) {
+			if (this.code[i] === "\\") {
+				i += 2;
+				continue;
+			}
+			if (this.code.startsWith(terminator, i))
+				return i + terminator.length;
+			if (!tripleQuoted && this.code[i] === "\n")
+				return i;
+			i++;
+		}
+
+		return Math.min(i, this.code.length);
+	}
+
+	/**
+	 * Skips whitespace and returns the next index.
+	 */
+	private skipWhitespace(start: number, end: number): number {
+		let i = start;
+		while (i < end && /\s/.test(this.code[i])) i++;
+		return i;
 	}
 
 	/**
@@ -812,6 +1052,17 @@ const DART_RESERVED_WORDS = new Set([
 	"context",
 ]);
 
+/**
+ * Members that are available implicitly inside a State's build method and
+ * therefore must not be passed to an extracted StatelessWidget.
+ */
+const DART_IMPLICIT_MEMBERS = new Set([
+	"context",
+	"mounted",
+	"setState",
+	"widget",
+]);
+
 export interface ExtractedVariable {
 	name: string;
 	type: string;
@@ -876,39 +1127,188 @@ export function findLocallyDeclaredVariables(widgetCode: string): Set<string> {
  */
 export function extractFreeVariables(widgetCode: string): string[] {
 	const variables = new Set<string>();
-	const locallyDeclared = findLocallyDeclaredVariables(widgetCode);
+	// Strip comments and string literals so we don't pick up words from comments/strings
+	const sanitized = stripCommentsAndStrings(widgetCode);
+	const locallyDeclared = findLocallyDeclaredVariables(sanitized);
 	const identRegex = /\b[a-z_][a-zA-Z0-9_]*\b/g;
 	let match: RegExpExecArray | null;
 
-	while ((match = identRegex.exec(widgetCode)) !== null) {
+	while ((match = identRegex.exec(sanitized)) !== null) {
 		const name = match[0];
 		const index = match.index;
 
 		if (DART_RESERVED_WORDS.has(name)) continue;
+		if (DART_IMPLICIT_MEMBERS.has(name)) continue;
 		if (locallyDeclared.has(name)) continue;
 
-		// Check if preceded by a dot: `object.property` -> property is not free
+		// Check if preceded by a dot: `object.property` -> property is not free.
+		// Spread usages (`...items`) are still free variables.
 		let prevIndex = index - 1;
-		while (prevIndex >= 0 && (widgetCode[prevIndex] === " " || widgetCode[prevIndex] === "\t")) {
+		while (prevIndex >= 0 && (sanitized[prevIndex] === " " || sanitized[prevIndex] === "\t")) {
 			prevIndex--;
 		}
-		if (prevIndex >= 0 && widgetCode[prevIndex] === ".") continue;
+		const isSpread = prevIndex >= 2 && sanitized[prevIndex] === "." && sanitized[prevIndex - 1] === "." && sanitized[prevIndex - 2] === ".";
+		if (prevIndex >= 0 && sanitized[prevIndex] === "." && !isSpread) continue;
 
 		// Check if it's a named parameter label: `label: value`
 		let nextIndex = index + name.length;
-		while (nextIndex < widgetCode.length && (widgetCode[nextIndex] === " " || widgetCode[nextIndex] === "\t")) {
+		while (nextIndex < sanitized.length && (sanitized[nextIndex] === " " || sanitized[nextIndex] === "\t")) {
 			nextIndex++;
 		}
-		if (nextIndex < widgetCode.length && widgetCode[nextIndex] === ":") {
-			if (prevIndex >= 0 && (widgetCode[prevIndex] === "(" || widgetCode[prevIndex] === "," || widgetCode[prevIndex] === "\n")) {
+		if (nextIndex < sanitized.length && sanitized[nextIndex] === ":") {
+			if (prevIndex >= 0 && (sanitized[prevIndex] === "(" || sanitized[prevIndex] === "," || sanitized[prevIndex] === "\n")) {
 				continue;
 			}
 		}
 
+		// Skip type/class/enum/constructor names (including private like _Section)
+		if (/^_?[A-Z]/.test(name)) continue;
+
 		variables.add(name);
 	}
 
+	// Properties read through `widget.` belong to the enclosing StatefulWidget and
+	// are passed through to the extracted widget under their own name.
+	const widgetMemberRegex = /\bwidget\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)/g;
+	let memberMatch: RegExpExecArray | null;
+	while ((memberMatch = widgetMemberRegex.exec(sanitized)) !== null) {
+		const member = memberMatch[1];
+		if (!DART_RESERVED_WORDS.has(member) && !DART_IMPLICIT_MEMBERS.has(member) && !locallyDeclared.has(member))
+			variables.add(member);
+	}
+
 	return Array.from(variables);
+}
+
+/**
+ * Replaces comments and literal string content with spaces to avoid extracting
+ * identifiers from them, while preserving identifiers used in string
+ * interpolations (e.g. `'$_online'` or `'${_online}'`).
+ */
+function stripCommentsAndStrings(code: string): string {
+	return maskCommentsAndLiteralStrings(code, false).text;
+}
+
+interface MaskResult {
+	text: string;
+	next: number;
+}
+
+function maskCommentsAndLiteralStrings(code: string, stopAtBrace: boolean): MaskResult {
+	let result = "";
+	let braceDepth = 0;
+	let i = 0;
+
+	while (i < code.length) {
+		const char = code[i];
+		const next = i + 1 < code.length ? code[i + 1] : "";
+
+		// Single line comment.
+		if (char === "/" && next === "/") {
+			const end = code.indexOf("\n", i);
+			const stop = end === -1 ? code.length : end;
+			for (; i < stop; i++)
+				result += " ";
+			continue;
+		}
+
+		// Block comment.
+		if (char === "/" && next === "*") {
+			const end = code.indexOf("*/", i + 2);
+			const stop = end === -1 ? code.length : end + 2;
+			for (; i < stop; i++)
+				result += code[i] === "\n" ? "\n" : " ";
+			continue;
+		}
+
+		// Raw strings do not interpolate.
+		if (char === "r" && (next === "'" || next === "\"") && !isIdentifierPart(code[i - 1] ?? "")) {
+			result += " ";
+			i++;
+			const literal = maskString(code, i, true);
+			result += literal.text;
+			i = literal.next;
+			continue;
+		}
+
+		// Strings (including interpolations).
+		if (char === "'" || char === "\"") {
+			const literal = maskString(code, i, false);
+			result += literal.text;
+			i = literal.next;
+			continue;
+		}
+
+		if (stopAtBrace && char === "}" && braceDepth === 0)
+			return { next: i, text: result };
+
+		if (char === "{")
+			braceDepth++;
+		else if (char === "}")
+			braceDepth = Math.max(0, braceDepth - 1);
+
+		result += char;
+		i++;
+	}
+
+	return { next: i, text: result };
+}
+
+/**
+ * Masks a Dart string literal, keeping only interpolated expressions.
+ */
+function maskString(code: string, start: number, raw: boolean): MaskResult {
+	const quote = code[start];
+	const tripleQuoted = code[start + 1] === quote && code[start + 2] === quote;
+	const quoteLength = tripleQuoted ? 3 : 1;
+	const terminator = quote.repeat(quoteLength);
+
+	let text = " ".repeat(quoteLength);
+	let i = start + quoteLength;
+
+	while (i < code.length) {
+		const char = code[i];
+
+		if (!raw && char === "\\" && i + 1 < code.length) {
+			text += "  ";
+			i += 2;
+			continue;
+		}
+
+		if (code.startsWith(terminator, i)) {
+			text += " ".repeat(quoteLength);
+			i += quoteLength;
+			break;
+		}
+
+		if (!raw && char === "$") {
+			const next = code[i + 1] ?? "";
+
+			// Braced interpolation: `${expression}`.
+			if (next === "{") {
+				const inner = maskCommentsAndLiteralStrings(code.substring(i + 2), true);
+				const closeBrace = i + 2 + inner.next;
+				text += "${" + inner.text + "}";
+				i = closeBrace + 1;
+				continue;
+			}
+
+			// Simple interpolation: `$identifier`.
+			if (isIdentifierStart(next)) {
+				let end = i + 2;
+				while (end < code.length && isIdentifierPart(code[end]))
+					end++;
+				text += "$" + code.substring(i + 1, end);
+				i = end;
+				continue;
+			}
+		}
+
+		text += char === "\n" ? "\n" : " ";
+		i++;
+	}
+
+	return { next: i, text };
 }
 
 /**
@@ -1063,96 +1463,485 @@ export function extractTypeAt(code: string, startIndex: number): string | undefi
 export function inferVariableTypes(fullCode: string, widgetStartOffset: number, variableNames: string[], widgetCode: string): ExtractedVariable[] {
 	const cleanScopeBefore = stripComments(fullCode.substring(0, widgetStartOffset));
 	const cleanFullCode = stripComments(fullCode);
+	const scanner = new DartCodeScanner(cleanFullCode);
 
 	return variableNames.map((name) => {
 		let foundType: string | undefined;
 
-		// 1. Check for `var name = Constructor<...>(...)` or `final name = Constructor<...>(...)`
-		const initRegex = new RegExp(`\\b(?:var|final|late)\\s+\\b${name}\\b\\s*=\\s*`, "g");
+		// 1. Check for `var name = Constructor<...>(...)` or `final name = Constructor<...>(...)`.
+		// Only treat the initialiser as a type when it actually looks like an
+		// instantiation; otherwise `final item = entry.value` would wrongly
+		// infer `entry` as the type.
+		const initRegex = new RegExp(`\\b(?:var|final|late)\\s+\\b${escapeRegExp(name)}\\b\\s*=\\s*`, "g");
 		let match: RegExpExecArray | null;
 		while ((match = initRegex.exec(cleanScopeBefore)) !== null) {
 			const rhsStart = match.index + match[0].length;
 			const inferred = extractTypeAt(cleanScopeBefore, rhsStart);
-			if (inferred && inferred !== "var" && inferred !== "final" && inferred !== "late") {
+			if (inferred && inferred !== "var" && inferred !== "final" && inferred !== "late" && looksLikeConstructorInitializer(cleanScopeBefore, rhsStart, inferred))
 				foundType = inferred;
-			}
 		}
 
-		// 2. Check for explicit type declaration: `CustomType<...> name` or `final CustomType<...> name;`
+		// 1b. Closure-local variables derived from a collection value/key:
+		// `final item = entry.value;` where `entry` is a `MapEntry`.
+		if (!foundType)
+			foundType = inferDerivedLocalType(cleanScopeBefore, name);
+
+		// 2. Getters: `bool get hasSelection => ...`.
+		if (!foundType)
+			foundType = findGetterType(cleanFullCode, name);
+
+		// 3. Explicit field declarations, including primitives, generics and
+		// function types: `final bool visible;`, `final void Function(String) onTap;`.
+		if (!foundType)
+			foundType = findDeclaredType(cleanFullCode, name);
+
+		// 4. Methods and callbacks: `void select(int index) { ... }`.
+		if (!foundType)
+			foundType = findMethodType(cleanFullCode, name, scanner);
+
+		// 5. Explicit type declaration with an uppercase type name.
 		if (!foundType) {
-			const declRegex = new RegExp(`\\b(?:final\\s+|const\\s+|late\\s+)?([A-Z][a-zA-Z0-9_]*)\\s*(?:<[^;=]+>)?\\s*\\??\\s+\\b${name}\\b\\s*(?:[;=,)]|$)`, "g");
+			const declRegex = new RegExp(`\\b(?:final\\s+|const\\s+|late\\s+)?([A-Z][a-zA-Z0-9_]*)\\s*(?:<[^;=]+>)?\\s*\\??\\s+\\b${escapeRegExp(name)}\\b\\s*(?:[;=,)]|$)`, "g");
 			while ((match = declRegex.exec(cleanScopeBefore)) !== null) {
 				const matchStr = match[0];
 				const typeOffsetInMatch = matchStr.search(/[A-Z]/);
 				if (typeOffsetInMatch !== -1) {
 					const typeStart = match.index + typeOffsetInMatch;
 					const inferred = extractTypeAt(cleanScopeBefore, typeStart);
-					if (inferred && inferred !== "final" && inferred !== "const" && inferred !== "late" && inferred !== "var") {
+					if (inferred && inferred !== "final" && inferred !== "const" && inferred !== "late" && inferred !== "var")
 						foundType = inferred;
-					}
 				}
 			}
 		}
 
-		// 3. Check for class methods / functions in the file: e.g. `Expanded expanded()` or `Widget expanded()` or `void handleTap()`
+		// 6. Check for `Theme.of(context)`.
 		if (!foundType) {
-			const methodRegex = new RegExp(`\\b([A-Za-z0-9_]+)\\s*(?:<[^;{]+>)?\\s*\\??\\s+\\b${name}\\s*\\(`, "g");
-			while ((match = methodRegex.exec(cleanFullCode)) !== null) {
-				const retStart = match.index;
-				const retType = extractTypeAt(cleanFullCode, retStart);
-				if (retType && retType !== "if" && retType !== "while" && retType !== "switch") {
-					if (retType === "void") {
-						foundType = "VoidCallback";
-					} else {
-						foundType = `${retType} Function()`;
-					}
-				}
-			}
-		}
-
-		// 4. Check for `Theme.of(context)`
-		if (!foundType) {
-			const themeRegex = new RegExp(`\\b${name}\\s*=\\s*Theme\\.of\\b`);
-			if (themeRegex.test(cleanScopeBefore)) {
+			const themeRegex = new RegExp(`\\b${escapeRegExp(name)}\\s*=\\s*Theme\\.of\\b`);
+			if (themeRegex.test(cleanScopeBefore))
 				foundType = "ThemeData";
-			}
 		}
 
-		// 5. Infer from usage in widgetCode
+		// 7. Infer from usage in the extracted widget code.
 		if (!foundType) {
-			const callRegex = new RegExp(`\\b${name}\\s*\\(`);
-			if (callRegex.test(widgetCode)) {
-				foundType = "Widget Function()";
-			}
-		}
-
-		if (!foundType) {
-			const strCompareRegex = new RegExp(`\\b${name}\\s*(?:==|!=)\\s*['"]|['"]\\s*(?:==|!=)\\s*\\b${name}\\b`);
-			if (strCompareRegex.test(widgetCode)) {
-				foundType = "String";
-			}
-		}
-
-		if (!foundType) {
-			const numRegex = new RegExp(`\\b${name}\\s*[*+/-]\\s*\\d|\\b(?:width|height|size|radius|fontSize)\\s*:\\s*\\b${name}\\b`);
-			if (numRegex.test(widgetCode)) {
-				foundType = "double";
-			}
-		}
-
-		if (!foundType) {
-			const boolRegex = new RegExp(`\\b${name}\\s*\\?|\\b${name}\\s*&&|\\b${name}\\s*\\|\\|`);
-			if (boolRegex.test(widgetCode)) {
+			const boolRegex = new RegExp(`\\b${escapeRegExp(name)}\\s*\\?|\\b${escapeRegExp(name)}\\s*&&|\\b${escapeRegExp(name)}\\s*\\|\\||\\bif\\s*\\(\\s*!?\\s*${escapeRegExp(name)}\\b`);
+			if (boolRegex.test(widgetCode))
 				foundType = "bool";
-			}
 		}
 
 		if (!foundType) {
-			foundType = "dynamic";
+			const strCompareRegex = new RegExp(`\\b${escapeRegExp(name)}\\s*(?:==|!=)\\s*['"]|['"]\\s*(?:==|!=)\\s*\\b${escapeRegExp(name)}\\b`);
+			if (strCompareRegex.test(widgetCode))
+				foundType = "String";
 		}
+
+		if (!foundType) {
+			const numRegex = new RegExp(`\\b${escapeRegExp(name)}\\s*[*+/-]\\s*\\d|\\b(?:width|height|size|radius|fontSize)\\s*:\\s*\\b${escapeRegExp(name)}\\b`);
+			if (numRegex.test(widgetCode))
+				foundType = "double";
+		}
+
+		if (!foundType) {
+			const callRegex = new RegExp(`\\b${escapeRegExp(name)}\\s*\\(`);
+			if (callRegex.test(widgetCode))
+				foundType = "Widget Function()";
+		}
+
+		if (!foundType)
+			foundType = "dynamic";
 
 		return { name, type: foundType };
 	});
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Finds an explicitly declared type for a field or variable, including
+ * primitives and function types.
+ */
+function findDeclaredType(code: string, name: string): string | undefined {
+	const escaped = escapeRegExp(name);
+
+	// `final bool visible`, `final List<Record> items`, `final void Function(String) onTap`.
+	const modifierRegex = new RegExp(`\\b(?:final|const|late|static)\\s+([A-Za-z_][A-Za-z0-9_<>,?()\\[\\]{}.\\s]*?)\\s+${escaped}\\b`, "g");
+	let match: RegExpExecArray | null;
+	while ((match = modifierRegex.exec(code)) !== null) {
+		const type = normalizeTypeName(match[1]);
+		if (type && !isTypeModifier(type))
+			return type;
+	}
+
+	// Primitive instance fields without a modifier: `int selectedIndex = 0;`.
+	const primitiveRegex = new RegExp(`(?:^|[;{}])\\s*((?:int|double|num|bool|String|Object|dynamic)\\??)\\s+${escaped}\\b`, "gm");
+	while ((match = primitiveRegex.exec(code)) !== null)
+		return match[1];
+
+	// Non-final fields with a camel-cased type: `List<String> tags = [];`.
+	const fieldRegex = new RegExp(`(?:^|[;{}])\\s*([A-Z][A-Za-z0-9_<>,?()\\[\\]{} .]*?)\\s+${escaped}\\s*(?:=|;)`, "gm");
+	while ((match = fieldRegex.exec(code)) !== null) {
+		const type = normalizeTypeName(match[1]);
+		if (type && !isTypeModifier(type) && !/\b(?:get|set)$/.test(type))
+			return type;
+	}
+
+	return undefined;
+}
+
+/**
+ * Returns whether the initialiser at `start` really is an instantiation of
+ * `type` (for example `Foo(...)`, `const Foo(...)` or `Foo.named(...)`).
+ *
+ * A plain reference such as `entry.value` or a comparison such as
+ * `index == selectedIndex` must not be mistaken for a constructor call.
+ */
+function looksLikeConstructorInitializer(code: string, start: number, type: string): boolean {
+	if (!/^[A-Z]/.test(type))
+		return false;
+
+	const typeIndex = code.indexOf(type, start);
+	if (typeIndex === -1)
+		return false;
+
+	let i = typeIndex + type.length;
+	while (i < code.length && /\s/.test(code[i]))
+		i++;
+
+	if (code[i] === "(")
+		return true;
+
+	// Named constructor or static member: `Foo.named(...)`.
+	if (code[i] === ".") {
+		i++;
+		while (i < code.length && /\s/.test(code[i]))
+			i++;
+		if (!isIdentifierStart(code[i] ?? ""))
+			return false;
+		while (i < code.length && isIdentifierPart(code[i]))
+			i++;
+		while (i < code.length && /\s/.test(code[i]))
+			i++;
+		return code[i] === "(";
+	}
+
+	return false;
+}
+
+/**
+ * Infers the type of a closure-local variable initialised from a collection
+ * entry, for example `final item = entry.value;` where `entry` is a
+ * `MapEntry<...>`. Also handles `.key` and explicit parameter types.
+ */
+function inferDerivedLocalType(code: string, name: string): string | undefined {
+	const declRegex = new RegExp(`\\b(?:final|var|late)\\s+${escapeRegExp(name)}\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\.\\s*(key|value)\\b`, "g");
+	let match: RegExpExecArray | null;
+	while ((match = declRegex.exec(code)) !== null) {
+		const baseType = inferClosureParameterType(code, match[1]);
+		if (!baseType)
+			continue;
+
+		const args = genericTypeArguments(baseType);
+		if (args?.length !== 2 || !/^MapEntry\b/.test(baseType))
+			continue;
+
+		return match[2] === "key" ? args[0] : args[1];
+	}
+	return undefined;
+}
+
+/**
+ * Infers the type of a closure parameter from its declaration or from the
+ * collection it is iterating (`list.map((item) => ...)`,
+ * `list.asMap().entries.map((entry) => ...)`).
+ */
+function inferClosureParameterType(code: string, paramName: string): string | undefined {
+	const explicitType = findClosureParameterType(code, paramName);
+	if (explicitType)
+		return explicitType;
+
+	const escaped = escapeRegExp(paramName);
+	const receiver = "([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)";
+
+	// `list.asMap().entries.map((param) => ...)` iterates `MapEntry<int, T>`.
+	let match = new RegExp(`\\b${receiver}\\s*\\.\\s*asMap\\s*\\(\\s*\\)\\s*\\.\\s*entries\\s*\\.\\s*map\\s*\\(\\s*\\(?\\s*${escaped}\\b`).exec(code);
+	if (match) {
+		const elementType = listElementType(resolveExpressionType(code, match[1]));
+		if (elementType)
+			return `MapEntry<int, ${elementType}>`;
+	}
+
+	// `map.entries.map((param) => ...)` iterates `MapEntry<K, V>`.
+	match = new RegExp(`\\b${receiver}\\s*\\.\\s*entries\\s*\\.\\s*map\\s*\\(\\s*\\(?\\s*${escaped}\\b`).exec(code);
+	if (match) {
+		const mapType = resolveExpressionType(code, match[1]);
+		const args = mapType ? genericTypeArguments(mapType) : undefined;
+		if (mapType && args?.length === 2 && /^Map\b/.test(mapType))
+			return `MapEntry<${args[0]}, ${args[1]}>`;
+	}
+
+	// `list.map((param) => ...)` iterates the list element type.
+	match = new RegExp(`\\b${receiver}\\s*\\.\\s*map\\s*\\(\\s*\\(?\\s*${escaped}\\b`).exec(code);
+	if (match) {
+		const elementType = listElementType(resolveExpressionType(code, match[1]));
+		if (elementType)
+			return elementType;
+	}
+
+	return undefined;
+}
+
+/**
+ * Finds an explicitly typed closure parameter such as
+ * `(MapEntry<int, String> entry) { ... }`.
+ */
+function findClosureParameterType(code: string, paramName: string): string | undefined {
+	const scanner = new DartCodeScanner(code);
+	const paramRegex = new RegExp(`\\b${escapeRegExp(paramName)}\\b`, "g");
+	let paramMatch: RegExpExecArray | null;
+	while ((paramMatch = paramRegex.exec(code)) !== null) {
+		let openParen = code.lastIndexOf("(", paramMatch.index);
+		while (openParen !== -1) {
+			const closeParen = scanner.findMatchingBracket(openParen);
+			if (closeParen > paramMatch.index) {
+				let after = closeParen + 1;
+				while (after < code.length && /\s/.test(code[after]))
+					after++;
+				if (code[after] === "{" || code.startsWith("=>", after)) {
+					const type = parameterTypeFromList(code.substring(openParen + 1, closeParen), paramName);
+					if (type)
+						return type;
+					break;
+				}
+			}
+			openParen = openParen > 0 ? code.lastIndexOf("(", openParen - 1) : -1;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Extracts the declared type of a single named parameter from a parameter list.
+ */
+function parameterTypeFromList(parameterList: string, paramName: string): string | undefined {
+	for (const rawParameter of splitTopLevel(parameterList, ",")) {
+		let parameter = rawParameter.trim();
+		if (!parameter)
+			continue;
+
+		parameter = parameter.replace(/^[{[]\s*/, "").replace(/\s*[}\]]$/, "").trim();
+		parameter = parameter.replace(/@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*/g, "");
+		parameter = parameter.replace(/^(?:required|covariant|final|const)\s+/, "");
+		parameter = parameter.split("=")[0].trim();
+		if (!parameter)
+			continue;
+
+		const parts = /^(.*\S)\s+([A-Za-z_][A-Za-z0-9_]*)$/.exec(parameter);
+		if (parts?.[2] !== paramName)
+			continue;
+
+		const type = normalizeTypeName(parts[1]);
+		if (type && !isTypeModifier(type))
+			return type;
+	}
+	return undefined;
+}
+
+/**
+ * Resolves the declared type of an identifier or simple property chain.
+ */
+function resolveExpressionType(code: string, expression: string): string | undefined {
+	const parts = expression.split(".");
+	const name = parts[parts.length - 1];
+	return findGetterType(code, name) ?? findDeclaredType(code, name);
+}
+
+/**
+ * Returns the element type of a list-like type such as `List<T>` or `Set<T>`.
+ */
+function listElementType(type: string | undefined): string | undefined {
+	if (!type)
+		return undefined;
+	const args = genericTypeArguments(type);
+	if (args?.length !== 1)
+		return undefined;
+	return /^(?:List|Iterable|Set|Queue|LinkedList|UnmodifiableListView)\b/.test(type) ? args[0] : undefined;
+}
+
+/**
+ * Splits the outer type arguments of a generic type, preserving nested types.
+ */
+function genericTypeArguments(type: string): string[] | undefined {
+	const start = type.indexOf("<");
+	if (start === -1 || !type.endsWith(">"))
+		return undefined;
+
+	const args = splitTopLevel(type.substring(start + 1, type.length - 1), ",")
+		.map((arg) => arg.trim())
+		.filter((arg) => arg.length > 0);
+	return args.length > 0 ? args : undefined;
+}
+
+/**
+ * Finds the declared return type of a getter.
+ */
+function findGetterType(code: string, name: string): string | undefined {
+	const getterRegex = new RegExp(`\\bget\\s+${escapeRegExp(name)}\\b`, "g");
+	let match: RegExpExecArray | null;
+	while ((match = getterRegex.exec(code)) !== null) {
+		let prefix = code.substring(code.lastIndexOf("\n", match.index) + 1, match.index).trim();
+		prefix = prefix.replace(/@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*/g, "");
+		prefix = stripTypeModifiers(prefix);
+		const type = extractTypeAt(prefix, 0);
+		if (type && !isTypeModifier(type))
+			return normalizeTypeName(type);
+	}
+	return undefined;
+}
+
+/**
+ * Finds a method declaration and turns it into a function type.
+ *
+ * `void select(int index) { ... }` becomes `void Function(int)`.
+ */
+function findMethodType(code: string, name: string, scanner: DartCodeScanner): string | undefined {
+	const methodRegex = new RegExp(`\\b${escapeRegExp(name)}\\s*\\(`, "g");
+	let match: RegExpExecArray | null;
+	while ((match = methodRegex.exec(code)) !== null) {
+		const openParen = code.indexOf("(", match.index);
+		if (openParen === -1)
+			continue;
+		const closeParen = scanner.findMatchingBracket(openParen);
+		if (closeParen === -1)
+			continue;
+
+		// Methods are followed by a body or expression body, calls are not.
+		let afterParams = closeParen + 1;
+		while (afterParams < code.length && /\s/.test(code[afterParams]))
+			afterParams++;
+		if (code.startsWith("async", afterParams)) {
+			afterParams += "async".length;
+			while (afterParams < code.length && /\s/.test(code[afterParams]))
+				afterParams++;
+		}
+		if (code[afterParams] !== "{" && !code.startsWith("=>", afterParams))
+			continue;
+
+		let prefix = code.substring(code.lastIndexOf("\n", match.index) + 1, match.index).trim();
+		prefix = prefix.replace(/@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*/g, "");
+		prefix = stripTypeModifiers(prefix);
+		const returnType = extractTypeAt(prefix, 0);
+		if (!returnType || isTypeModifier(returnType) || returnType === "return" || returnType === "await")
+			continue;
+
+		const parameters = formatParameterList(code.substring(openParen + 1, closeParen));
+		if (parameters)
+			return `${returnType} Function(${parameters})`;
+		return returnType === "void" ? "VoidCallback" : `${returnType} Function()`;
+	}
+	return undefined;
+}
+
+/**
+ * Formats a Dart parameter list as a function type parameter list, keeping the
+ * distinction between positional, optional positional and named parameters.
+ */
+function formatParameterList(parameters: string): string {
+	const positional: string[] = [];
+	const named: string[] = [];
+	const optionalPositional: string[] = [];
+	let group: "positional" | "named" | "optional" = "positional";
+
+	for (const rawParameter of splitTopLevel(parameters.trim(), ",")) {
+		let parameter = rawParameter.trim();
+		if (!parameter)
+			continue;
+
+		if (parameter.startsWith("{"))
+			group = "named";
+		else if (parameter.startsWith("["))
+			group = "optional";
+		parameter = parameter.replace(/^[{[]\s*/, "").replace(/\s*[}\]]$/, "").trim();
+		if (!parameter)
+			continue;
+
+		parameter = parameter.replace(/@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?\s*/g, "");
+		parameter = parameter.replace(/^(?:covariant|final|const)\s+/, "");
+
+		let required = false;
+		if (parameter.startsWith("required ")) {
+			required = true;
+			parameter = parameter.substring("required ".length).trim();
+		}
+
+		parameter = parameter.split("=")[0].trim();
+		if (!parameter)
+			continue;
+
+		let type = "dynamic";
+		let parameterName = "";
+		if (parameter.startsWith("this.")) {
+			parameterName = parameter.substring("this.".length).trim();
+		} else {
+			const parts = /^(.*\S)\s+([A-Za-z_][A-Za-z0-9_]*)$/.exec(parameter);
+			if (parts?.[1].trim()) {
+				type = normalizeTypeName(parts[1]);
+				parameterName = parts[2];
+			} else {
+				type = normalizeTypeName(parameter);
+			}
+		}
+
+		const signature = type === "dynamic" ? parameterName || "dynamic" : type;
+		if (group === "named")
+			named.push(`${required ? "required " : ""}${signature}${parameterName && type !== "dynamic" ? ` ${parameterName}` : ""}`);
+		else if (group === "optional")
+			optionalPositional.push(`${signature}${parameterName && type !== "dynamic" ? ` ${parameterName}` : ""}`);
+		else
+			positional.push(signature);
+	}
+
+	const sections = [...positional];
+	if (named.length > 0)
+		sections.push(`{${named.join(", ")}}`);
+	if (optionalPositional.length > 0)
+		sections.push(`[${optionalPositional.join(", ")}]`);
+	return sections.join(", ");
+}
+
+function splitTopLevel(value: string, separator: string): string[] {
+	const parts: string[] = [];
+	let current = "";
+	let depth = 0;
+	for (const char of value) {
+		if (char === "<" || char === "(" || char === "[" || char === "{")
+			depth++;
+		else if (char === ">" || char === ")" || char === "]" || char === "}")
+			depth = Math.max(0, depth - 1);
+		if (char === separator && depth === 0) {
+			parts.push(current);
+			current = "";
+		} else {
+			current += char;
+		}
+	}
+	parts.push(current);
+	return parts;
+}
+
+function stripTypeModifiers(prefix: string): string {
+	let result = prefix.trim();
+	while (/^(?:static|external|late|final|const|abstract|factory)\b\s*/.test(result))
+		result = result.replace(/^(?:static|external|late|final|const|abstract|factory)\b\s*/, "");
+	return result;
+}
+
+function isTypeModifier(type: string): boolean {
+	return /^(?:static|external|late|final|const|abstract|factory|var|required|covariant|this|return|await)$/.test(type);
+}
+
+function normalizeTypeName(type: string): string {
+	return type.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -1166,24 +1955,51 @@ export function generateExtractWidget(
 	const widgetCode = fullCode.substring(targetRange.start, targetRange.end);
 	const varNames = extractFreeVariables(widgetCode);
 	const variables = inferVariableTypes(fullCode, targetRange.start, varNames, widgetCode);
+	const widgetMembers = extractWidgetMemberNames(widgetCode);
+
+	// Normalize private names (leading underscores) to public names for extracted widget params/fields
+	const normalizeName = (name: string): string => {
+		if (name.startsWith("_")) {
+			const stripped = name.replace(/^_+/, "");
+			if (!stripped) return name;
+			return stripped[0].toLowerCase() + stripped.slice(1);
+		}
+		return name;
+	};
+
+	// Replace usages of private variables in the widget body with their normalized names,
+	// including usages inside string interpolations (e.g. `'$_online'`).
+	// References to `widget.<member>` are replaced with the extracted field.
+	let bodyCode = widgetCode;
+	for (const v of variables) {
+		const normalized = normalizeName(v.name);
+		const widgetMember = widgetMembers.has(v.name) ? v.name : undefined;
+		if (normalized !== v.name || widgetMember)
+			bodyCode = renameVariableUsages(bodyCode, v.name, normalized, widgetMember);
+	}
 
 	let usageText: string;
 	if (variables.length > 0) {
-		const args = variables.map((v) => `${v.name}: ${v.name}`).join(", ");
+		const args = variables
+			.map((v) => {
+				const value = widgetMembers.has(v.name) ? `widget.${v.name}` : v.name;
+				return `${normalizeName(v.name)}: ${value}`;
+			})
+			.join(", ");
 		usageText = `${newWidgetName}(${args})`;
 	} else {
 		usageText = `const ${newWidgetName}()`;
 	}
 
-	const indentedBody = widgetCode.split("\n").map((line, idx) => {
+	const indentedBody = bodyCode.split("\n").map((line, idx) => {
 		if (idx === 0) return line;
 		return "    " + line;
 	}).join("\n");
 
 	let classText: string;
 	if (variables.length > 0) {
-		const constructorParams = variables.map((v) => `    required this.${v.name},`).join("\n");
-		const fieldDeclarations = variables.map((v) => `  final ${v.type} ${v.name};`).join("\n");
+		const constructorParams = variables.map((v) => `    required this.${normalizeName(v.name)},`).join("\n");
+		const fieldDeclarations = variables.map((v) => `  final ${v.type} ${normalizeName(v.name)};`).join("\n");
 
 		classText = `\n\nclass ${newWidgetName} extends StatelessWidget {\n  const ${newWidgetName}({\n    super.key,\n${constructorParams}\n  });\n\n${fieldDeclarations}\n\n  @override\n  Widget build(BuildContext context) {\n    return ${indentedBody};\n  }\n}`;
 	} else {
@@ -1199,6 +2015,201 @@ export function generateExtractWidget(
 		replaceRange: targetRange,
 		usageText,
 	};
+}
+
+/**
+ * Returns the names of properties accessed through `widget.` in the snippet.
+ */
+function extractWidgetMemberNames(code: string): Set<string> {
+	const members = new Set<string>();
+	const cleanCode = stripCommentsAndStrings(code);
+	const regex = /\bwidget\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)/g;
+	let match: RegExpExecArray | null;
+	while ((match = regex.exec(cleanCode)) !== null)
+		members.add(match[1]);
+	return members;
+}
+
+/**
+ * Renames whole-word usages of an identifier in Dart code.
+ *
+ * Unlike a plain regular expression this skips comments and string literals,
+ * but still renames identifiers used in string interpolations such as
+ * `'$_online'` and `'${_online!.name}'`. When `widgetMember` is supplied,
+ * `widget.<member>` is replaced with `newName` as well.
+ */
+function renameVariableUsages(code: string, oldName: string, newName: string, widgetMember?: string): string {
+	return renameInCode(code, oldName, newName, false, widgetMember).text;
+}
+
+interface RenameResult {
+	text: string;
+	next: number;
+}
+
+function renameInCode(code: string, oldName: string, newName: string, stopAtBrace: boolean, widgetMember?: string): RenameResult {
+	let result = "";
+	let braceDepth = 0;
+	let i = 0;
+
+	while (i < code.length) {
+		const char = code[i];
+		const next = i + 1 < code.length ? code[i + 1] : "";
+
+		// Single line comment.
+		if (char === "/" && next === "/") {
+			const end = code.indexOf("\n", i);
+			const stop = end === -1 ? code.length : end;
+			result += code.substring(i, stop);
+			i = stop;
+			continue;
+		}
+
+		// Block comment.
+		if (char === "/" && next === "*") {
+			const end = code.indexOf("*/", i + 2);
+			const stop = end === -1 ? code.length : end + 2;
+			result += code.substring(i, stop);
+			i = stop;
+			continue;
+		}
+
+		// Raw strings do not interpolate.
+		if (char === "r" && (next === "'" || next === "\"") && !isIdentifierPart(code[i - 1] ?? "")) {
+			const literal = readString(code, i + 1, true, oldName, newName, widgetMember);
+			result += "r" + literal.text;
+			i = literal.next;
+			continue;
+		}
+
+		// Strings (including interpolations).
+		if (char === "'" || char === "\"") {
+			const literal = readString(code, i, false, oldName, newName, widgetMember);
+			result += literal.text;
+			i = literal.next;
+			continue;
+		}
+
+		// End of a `${...}` interpolation expression.
+		if (stopAtBrace && char === "}" && braceDepth === 0)
+			return { next: i, text: result };
+
+		if (char === "{")
+			braceDepth++;
+		else if (char === "}")
+			braceDepth = Math.max(0, braceDepth - 1);
+
+		// Identifiers.
+		if (isIdentifierStart(char)) {
+			let end = i + 1;
+			while (end < code.length && isIdentifierPart(code[end]))
+				end++;
+			const identifier = code.substring(i, end);
+
+			// `widget.<member>` is replaced with the extracted widget field.
+			if (widgetMember && identifier === "widget" && end < code.length && code[end] === ".") {
+				const memberStart = end + 1;
+				let memberEnd = memberStart;
+				while (memberEnd < code.length && isIdentifierPart(code[memberEnd]))
+					memberEnd++;
+				if (code.substring(memberStart, memberEnd) === widgetMember) {
+					result += newName;
+					i = memberEnd;
+					continue;
+				}
+			}
+
+			// Skip property accesses (`object._online`) but keep spread usages (`..._online`).
+			let prev = i - 1;
+			while (prev >= 0 && (code[prev] === " " || code[prev] === "\t"))
+				prev--;
+			const isPropertyAccess = prev >= 0 && code[prev] === ".";
+			const isSpread = prev >= 2 && code[prev] === "." && code[prev - 1] === "." && code[prev - 2] === ".";
+
+			result += identifier === oldName && (!isPropertyAccess || isSpread) ? newName : identifier;
+			i = end;
+			continue;
+		}
+
+		result += char;
+		i++;
+	}
+
+	return { next: i, text: result };
+}
+
+/**
+ * Reads a Dart string literal starting at `start` (the opening quote).
+ * Interpolated expressions are recursively renamed when `oldName` is supplied.
+ */
+function readString(
+	code: string,
+	start: number,
+	raw: boolean,
+	oldName: string,
+	newName: string,
+	widgetMember?: string,
+): RenameResult {
+	const quote = code[start];
+	const tripleQuoted = code[start + 1] === quote && code[start + 2] === quote;
+	const quoteLength = tripleQuoted ? 3 : 1;
+	const terminator = quote.repeat(quoteLength);
+
+	let result = terminator;
+	let i = start + quoteLength;
+
+	while (i < code.length) {
+		const char = code[i];
+
+		if (!raw && char === "\\" && i + 1 < code.length) {
+			result += code.substring(i, i + 2);
+			i += 2;
+			continue;
+		}
+
+		if (code.startsWith(terminator, i)) {
+			result += terminator;
+			i += quoteLength;
+			break;
+		}
+
+		if (!raw && char === "$") {
+			const next = code[i + 1] ?? "";
+
+			// Braced interpolation: `${expression}`.
+			if (next === "{") {
+				const inner = renameInCode(code.substring(i + 2), oldName, newName, true, widgetMember);
+				const closeBrace = i + 2 + inner.next;
+				result += "${" + inner.text + "}";
+				i = closeBrace + 1;
+				continue;
+			}
+
+			// Simple interpolation: `$identifier`.
+			if (isIdentifierStart(next)) {
+				let end = i + 2;
+				while (end < code.length && isIdentifierPart(code[end]))
+					end++;
+				const identifier = code.substring(i + 1, end);
+				result += "$" + (identifier === oldName ? newName : identifier);
+				i = end;
+				continue;
+			}
+		}
+
+		result += char;
+		i++;
+	}
+
+	return { next: i, text: result };
+}
+
+function isIdentifierStart(char: string): boolean {
+	return /[A-Za-z_]/.test(char);
+}
+
+function isIdentifierPart(char: string): boolean {
+	return /[A-Za-z0-9_]/.test(char);
 }
 
 export interface ClassDeclarationInfo {
