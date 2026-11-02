@@ -185,6 +185,7 @@ export const skipAction = "Skip";
 export const iUnderstandAction = "I Understand";
 export const showRecommendedSettingsAction = "Show Recommended Settings";
 export const recommendedSettingsUrl = "https://dartcode.org/docs/recommended-settings/";
+export const dartNativeReleaseNotesUrl = "https://github.com/crazidev/DartNative-Code/releases";
 export const onlyAnalyzeProjectsWithOpenFilesDeprecationUrl = "https://github.com/dart-lang/sdk/issues/61742";
 export const openSettingsAction = "Open Settings File";
 

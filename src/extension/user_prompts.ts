@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vs from "vscode";
 import { DartCapabilities } from "../shared/capabilities/dart";
-import { cursorInstallMcpServer, DART_CREATE_PROJECT_TRIGGER_FILE, FLUTTER_CREATE_PROJECT_TRIGGER_FILE, isWin, noAction, onlyAnalyzeProjectsWithOpenFilesDeprecationUrl, onlyAnalyzeProjectsWithOpenFilesPromptKey, recommendedSettingsUrl, showRecommendedSettingsAction, useRecommendedSettingsPromptKey, userPromptContextPrefix, yesAction } from "../shared/constants";
+import { cursorInstallMcpServer, DART_CREATE_PROJECT_TRIGGER_FILE, dartNativeReleaseNotesUrl, FLUTTER_CREATE_PROJECT_TRIGGER_FILE, isWin, noAction, onlyAnalyzeProjectsWithOpenFilesDeprecationUrl, onlyAnalyzeProjectsWithOpenFilesPromptKey, recommendedSettingsUrl, showRecommendedSettingsAction, useRecommendedSettingsPromptKey, userPromptContextPrefix, yesAction } from "../shared/constants";
 import { LogCategory } from "../shared/enums";
 import { WebClient } from "../shared/fetch";
 import { Analytics, DartProjectTemplate, FlutterCreateCommandArgs, FlutterCreateTriggerData, Logger } from "../shared/interfaces";
@@ -64,8 +64,7 @@ export async function showUserPrompts(logger: Logger, context: Context, webClien
 		// stash the current version and don't show anything.
 		context.lastSeenVersion = extensionVersionForReleaseNotes;
 	} else if (!isDevExtension && lastSeenVersionNotification !== extensionVersionForReleaseNotes) {
-		const versionLink = extensionVersionForReleaseNotes.split(".").slice(0, 2).join(".").replace(".", "-");
-		void promptToShowReleaseNotes(extensionVersion, versionLink).then(() =>
+		void promptToShowReleaseNotes(extensionVersion).then(() =>
 			context.lastSeenVersion = extensionVersionForReleaseNotes,
 		);
 		return;
@@ -142,13 +141,13 @@ async function promptAboutOnlyAnalyzeProjectsWithOpenFilesDeprecation(): Promise
 	return true;
 }
 
-async function promptToShowReleaseNotes(versionDisplay: string, versionLink: string): Promise<boolean> {
+async function promptToShowReleaseNotes(versionDisplay: string): Promise<boolean> {
 	const res = await vs.window.showInformationMessage(
 		`DartNative has been updated to v${versionDisplay}`,
 		`Show Release Notes`,
 	);
 	if (res) {
-		await envUtils.openInBrowser(`https://github.com/crazidev/DartNative-Code/releases/v${versionLink}/`);
+		await envUtils.openInBrowser(dartNativeReleaseNotesUrl);
 	}
 	return true; // Always mark this as done; we don't want to prompt the user multiple times.
 }
