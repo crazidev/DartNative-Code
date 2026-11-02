@@ -2,7 +2,7 @@
 	"name": "dartnative",
 	"displayName": "DartNative",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
-	"version": "3.144.1",
+	"version": "3.145.0",
 	"publisher": "Beatcode-studio",
 	"engines": {
 		"vscode": "^1.101.0"
@@ -69,6 +69,7 @@
 		"onCommand:dart.locateDartNativeSdk",
 		"onCommand:dart.setDartNativeLicenseKey",
 		"onCommand:dartnative.addSdkToPath",
+		"onCommand:dartnative.installMcpServer",
 		"onCommand:dart.getPackages",
 		"onCommand:dart.getPackages.all",
 		"onCommand:pub.get",
@@ -752,6 +753,11 @@
 				"command": "dartnative.addSdkToPath",
 				"title": "Add SDK to PATH",
 				"category": "DartNative"
+			},
+			{
+				"command": "dartnative.installMcpServer",
+				"title": "Install MCP Server",
+				"category": "DartNative"
 			}
 		],
 		"keybindings": [
@@ -775,7 +781,7 @@
 		"mcpServerDefinitionProviders": [
 			{
 				"id": "dart-sdk-mcp-servers",
-				"label": "Dart SDK MCP Servers",
+				"label": "DartNative SDK MCP Servers",
 				"when": "dart-code:anyProjectLoaded"
 			}
 		],
@@ -2828,10 +2834,31 @@
 							"dart_format": false,
 							"run_tests": false
 						},
-						"markdownDescription": "A map of MCP tool names to booleans to enable/disable specific tools from the Dart MCP server. Tools set to `false` will be excluded (if supported). By default, tools that overlap with built-in VS Code functionality will be excluded.",
+						"markdownDescription": "A map of MCP tool names to booleans to enable/disable specific tools from the DartNative SDK MCP server. Tools set to `false` will be excluded when supported by the SDK.",
 						"additionalProperties": {
 							"type": "boolean"
 						},
+						"scope": "window"
+					},
+					"dartnative.mcpServerGitUrl": {
+						"type": "string",
+						"default": "https://github.com/crazidev/dartnative_mcp",
+						"markdownDescription": "The Git URL of the `dartnative_mcp` package used by **DartNative: Install MCP Server**. The command activates the latest version from this URL with `dart pub global activate`.",
+						"scope": "window"
+					},
+					"dartnative.mcpServerGitRef": {
+						"type": "string",
+						"default": "main",
+						"markdownDescription": "The Git branch, tag, or commit to install for **DartNative: Install MCP Server**. Leave blank to use the repository's default branch.",
+						"scope": "window"
+					},
+					"dartnative.mcpServerPackagePath": {
+						"type": [
+							"null",
+							"string"
+						],
+						"default": null,
+						"markdownDescription": "An optional local path to a `dartnative_mcp` package. When set, **DartNative: Install MCP Server** activates this path instead of fetching from Git. This is useful for developing the MCP server.",
 						"scope": "window"
 					},
 					"dartnative.dartNativeSdkPath": {

@@ -2,7 +2,7 @@
 	"_comment": "DartNative manifest overlay — applied by scripts/patch-manifest.ts at build time.",
 	"displayName": "DartNative",
 	"name": "dartnative",
-	"version": "3.144.1",
+	"version": "3.145.0",
 	"publisher": "Beatcode-studio",
 	"description": "DartNative framework support and debugger for Visual Studio Code.",
 	"keywords": [
@@ -161,6 +161,9 @@
 		"dart.flutterDaemonLogFile": "dart.dartNativeDaemonLogFile"
 	},
 	"configurationPropertyOverrides": {
+		"dart.mcpServerTools": {
+			"markdownDescription": "A map of MCP tool names to booleans to enable/disable specific tools from the DartNative SDK MCP server. Tools set to `false` will be excluded when supported by the SDK."
+		},
 		"dart.flutterAdditionalArgs": {
 			"description": "Additional arguments to pass to `dartnative` commands, including the daemon. Arguments are passed directly to `dn`."
 		},
@@ -297,6 +300,27 @@
 				"markdownDescription": "The DartNative license key. When configured, this is exported as the environment variable `DN_LICENSE_KEY` and passed to `dn run` as `--dart-define=DN_LICENSE_KEY=<key>`.",
 				"scope": "window"
 			},
+			"dart.mcpServerGitUrl": {
+				"type": "string",
+				"default": "https://github.com/crazidev/dartnative_mcp",
+				"markdownDescription": "The Git URL of the `dartnative_mcp` package used by **DartNative: Install MCP Server**. The command activates the latest version from this URL with `dart pub global activate`.",
+				"scope": "window"
+			},
+			"dart.mcpServerGitRef": {
+				"type": "string",
+				"default": "main",
+				"markdownDescription": "The Git branch, tag, or commit to install for **DartNative: Install MCP Server**. Leave blank to use the repository's default branch.",
+				"scope": "window"
+			},
+			"dart.mcpServerPackagePath": {
+				"type": [
+					"null",
+					"string"
+				],
+				"default": null,
+				"markdownDescription": "An optional local path to a `dartnative_mcp` package. When set, **DartNative: Install MCP Server** activates this path instead of fetching from Git. This is useful for developing the MCP server.",
+				"scope": "window"
+			},
 			"dart.showCommandsWhenSdkMissing": {
 				"type": "boolean",
 				"default": false,
@@ -320,12 +344,18 @@
 			"command": "dartnative.addSdkToPath",
 			"title": "Add SDK to PATH",
 			"category": "DartNative"
+		},
+		{
+			"command": "dartnative.installMcpServer",
+			"title": "Install MCP Server",
+			"category": "DartNative"
 		}
 	],
 	"activationEvents": [
 		"onCommand:dart.locateDartNativeSdk",
 		"onCommand:dart.setDartNativeLicenseKey",
 		"onCommand:dartnative.addSdkToPath",
+		"onCommand:dartnative.installMcpServer",
 		"onCommand:dart.getPackages",
 		"onCommand:dart.getPackages.all",
 		"onCommand:pub.get",
