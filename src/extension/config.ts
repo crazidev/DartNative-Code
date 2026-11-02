@@ -159,6 +159,9 @@ class Config {
 	get evaluateToStringInDebugViews(): boolean { return this.getConfig<boolean>("evaluateToStringInDebugViews", true); }
 
 	get mcpServer(): boolean { return this.getConfig<boolean>("mcpServer", true); }
+	get mcpServerGitUrl(): string { return this.getConfig<string>("mcpServerGitUrl", "https://github.com/crazidev/dartnative_mcp"); }
+	get mcpServerGitRef(): string { return this.getConfig<string>("mcpServerGitRef", "main"); }
+	get mcpServerPackagePath(): undefined | string { return this.getConfig<null | string>("mcpServerPackagePath", null) ?? undefined; }
 	get mcpServerLogFile(): undefined | string { return createFolderForFile(insertWorkspaceName(resolvePaths(this.getConfig<null | string>("mcpServerLogFile", null)))); }
 	// eslint-disable-next-line camelcase
 	get mcpServerTools(): Record<string, boolean> { return this.getConfig<Record<string, boolean>>("mcpServerTools", {/* defaults from package.json */ }); }

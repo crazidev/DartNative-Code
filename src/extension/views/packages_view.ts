@@ -4,6 +4,7 @@ import * as vs from "vscode";
 import { DART_DEP_DEPENDENCIES_NODE_CONTEXT, DART_DEP_DEPENDENCY_PACKAGE_NODE_CONTEXT, DART_DEP_DEV_DEPENDENCIES_NODE_CONTEXT, DART_DEP_DEV_DEPENDENCY_PACKAGE_NODE_CONTEXT, DART_DEP_FILE_NODE_CONTEXT, DART_DEP_FOLDER_NODE_CONTEXT, DART_DEP_PACKAGE_NODE_CONTEXT, DART_DEP_PROJECT_NODE_CONTEXT, DART_DEP_PUB_HOSTED_PACKAGE_NODE_CONTEXT, DART_DEP_TRANSITIVE_DEPENDENCIES_NODE_CONTEXT, DART_DEP_TRANSITIVE_DEPENDENCY_PACKAGE_NODE_CONTEXT } from "../../shared/constants.contexts";
 import { DartWorkspaceContext, IAmDisposable, Logger } from "../../shared/interfaces";
 import { PubDeps, PubDepsTreePackageDependency, PubDepsTreePackageTransitiveDependency } from "../../shared/pub/deps";
+import { getPubPackagePageUrl } from "../../shared/pub/package_links";
 import { PackageMap, PackageMapLoader } from "../../shared/pub/package_map";
 import { disposeAll, notNullOrUndefined } from "../../shared/utils";
 import { sortBy } from "../../shared/utils/array";
@@ -149,8 +150,15 @@ export class DartPackagesProvider implements vs.TreeDataProvider<PackageDep>, IA
 	private async openDependencyPage(treeNode: PackageDepPackage) {
 		const packageName = treeNode?.packageName;
 		if (packageName) {
-			const pubHostedUrl = process.env.PUB_HOSTED_URL ?? "https://pub.dev";
-			const url = `${pubHostedUrl.replace(/\/$/, "")}/packages/${packageName}`;
+			// Determine the pub host for this dependency. Packages whose name starts with
+			// "dartnative_" live on dartpub.dev, and dependencies cached under a hosted
+			// folder carry their host in their path.
+			let pubHostedUrl = process.env.PUB_HOSTED_URL ?? "https://pub.dev";
+			const resourcePath = treeNode?.resourceUri?.path ?? "";
+			const hostedMatch = /\/hosted\/([^/]+)\//.exec(resourcePath);
+			if (hostedMatch)
+				pubHostedUrl = `https://${hostedMatch[1]}`;
+			const url = getPubPackagePageUrl(packageName, pubHostedUrl);
 			await envUtils.openInBrowser(url);
 		}
 	}

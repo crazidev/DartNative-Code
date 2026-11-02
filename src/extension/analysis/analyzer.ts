@@ -11,6 +11,7 @@ import { dartVMPath, ExtensionRestartReason } from "../../shared/constants";
 import { LogCategory } from "../../shared/enums";
 import { DartSdks, Logger, SpawnedProcess } from "../../shared/interfaces";
 import { CategoryLogger } from "../../shared/logging";
+import { rewritePubPackageUrl } from "../../shared/pub/package_links";
 import { DartToolingDaemon } from "../../shared/services/tooling_daemon";
 import { fsPath } from "../../shared/utils/fs";
 import { AnalyzerUpdateDiagnosticInformationFeature } from "../../shared/vscode/analyzer_update_diagnostic_information";
@@ -43,6 +44,12 @@ import {
 // Globals so we only show these errors once per session.
 let hasShownAnalysisServerVersionMismatchError = false;
 let hasShownDartOsVersionError = false;
+
+function rewritePubPackageTarget(uri: vs.Uri): vs.Uri {
+	const original = uri.toString();
+	const rewritten = rewritePubPackageUrl(original);
+	return rewritten === original ? uri : vs.Uri.parse(rewritten);
+}
 
 export class LspAnalyzer extends Analyzer {
 	public readonly client: LanguageClient;
@@ -308,6 +315,24 @@ export class LspAnalyzer extends Analyzer {
 				if (item?.contents)
 					item.contents = item.contents.map((s) => cleanDocString(s));
 				return item;
+			},
+
+			provideDocumentLinks: async (document: vs.TextDocument, token: vs.CancellationToken, next: ls.ProvideDocumentLinksSignature) => {
+				const links = await next(document, token);
+				if (links) {
+					for (const link of links) {
+						if (link.target)
+							link.target = rewritePubPackageTarget(link.target);
+					}
+				}
+				return links;
+			},
+
+			resolveDocumentLink: async (link: vs.DocumentLink, token: vs.CancellationToken, next: ls.ResolveDocumentLinkSignature) => {
+				const resolved = await next(link, token);
+				if (resolved?.target)
+					resolved.target = rewritePubPackageTarget(resolved.target);
+				return resolved;
 			},
 
 			workspace: {

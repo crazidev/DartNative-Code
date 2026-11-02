@@ -410,6 +410,395 @@ class ListScreen extends StatelessWidget {
 			assert.ok(!appended.includes("final dynamic index;"));
 			assert.ok(!appended.includes("final dynamic context;"));
 		});
+
+		it("infers closure-local MapEntry values instead of treating identifiers as types", () => {
+			const code = `
+class ItemList extends StatefulWidget {}
+class _ItemListState extends State<ItemList> {
+  final List<({String name, bool active})> _items = [];
+
+  List<({String name, bool active})> get _filteredItems => _items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ..._filteredItems.asMap().entries.map((entry) {
+          final index = entry.key;
+          final item = entry.value;
+          final selected = index == 0;
+          return Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '\${item.name} (\${item.active ? 'active' : 'paused'})',
+                  style: TextStyle(
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+}
+`;
+			const offset = code.indexOf("Expanded(");
+			const actions = getAvailableRefactorActions(code, offset);
+			const extractAction = actions.find((a) => a.title === "Extract Widget");
+			assert.ok(extractAction !== undefined);
+
+			const appended = extractAction.appendText ?? "";
+			assert.ok(appended.includes("final ({String name, bool active}) item;"));
+			assert.ok(appended.includes("final bool selected;"));
+			assert.ok(!appended.includes("final entry item;"));
+			assert.ok(!appended.includes("final index selected;"));
+
+			assert.ok(extractAction?.newText.includes("item: item"));
+			assert.ok(extractAction?.newText.includes("selected: selected"));
+		});
+	});
+
+	describe("Extract Widget: private members, strings and complex trees", () => {
+		it("renames private members inside string interpolation and spread usages", () => {
+			const code = `
+class Demo extends StatefulWidget {}
+class _DemoState extends State<Demo> {
+  String? _online;
+  final List<String> _log = [];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text('state: $_online'),
+        Text('nested: \${_online ?? "offline"}'),
+        Text("literal _online"),
+        ..._log.map((entry) => Text(entry)),
+      ],
+    );
+  }
+}
+`;
+			const offset = code.indexOf("Column(");
+			const actions = getAvailableRefactorActions(code, offset);
+			const extractAction = actions.find((a) => a.title === "Extract Widget");
+			assert.ok(extractAction !== undefined);
+
+			assert.ok(extractAction?.newText.includes("online: _online"));
+			assert.ok(extractAction?.newText.includes("log: _log"));
+			assert.equal(extractAction?.newText.includes("entry:"), false);
+
+			const appended = extractAction?.appendText ?? "";
+			assert.ok(appended.includes("final String? online;"));
+			assert.ok(appended.includes("final List<String> log;"));
+			assert.ok(appended.includes("'state: $online'"));
+			assert.ok(appended.includes("'nested: ${online ?? \"offline\"}'"));
+			assert.ok(appended.includes('Text("literal _online")'));
+			assert.ok(appended.includes("...log.map("));
+		});
+
+		it("finds private widgets as the extraction target", () => {
+			const code = `
+class Demo extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: [
+        const _Section('Title'),
+        _Value('label', 'value'),
+      ],
+    );
+  }
+}
+class _Section extends StatelessWidget {
+  const _Section(this.title);
+  final String title;
+  @override
+  Widget build(BuildContext context) => Text(title);
+}
+class _Value extends StatelessWidget {
+  const _Value(this.label, this.value);
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) => Text(label);
+}
+`;
+			const scanner = new DartCodeScanner(code);
+			const target = scanner.findEnclosingWidget(code.indexOf("_Value(") + 2);
+			assert.equal(target?.name, "_Value");
+
+			const actions = getAvailableRefactorActions(code, code.indexOf("_Value(") + 2);
+			const extractAction = actions.find((a) => a.title === "Extract Widget");
+			assert.ok(extractAction !== undefined);
+			assert.ok(extractAction?.appendText?.includes("return _Value("));
+		});
+
+		it("extracts complex if/else trees with getters, methods and records", () => {
+			const code = `
+class Complex extends StatefulWidget {}
+class _ComplexState extends State<Complex> {
+  final List<({String name, bool active})> _items = [];
+  final String _query = '';
+  bool _showDetails = true;
+  int _selectedIndex = 0;
+
+  bool get _hasSelection => _selectedIndex >= 0;
+  bool get _hasVisibleItems => _items.isNotEmpty;
+  List<({String name, bool active})> get _filteredItems => _items;
+
+  void _select(int index) {
+    setState(() => _selectedIndex = index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: _hasSelection ? Colors.white : Colors.grey,
+      child: Column(
+        children: [
+          Text('Index: $_selectedIndex'),
+          if (_hasVisibleItems)
+            Text('Filtering: $_query')
+          else
+            const Text('No matches'),
+          if (_showDetails && _hasSelection)
+            Button(
+              title: 'Select',
+              onPressed: () => _select(0),
+            )
+          else
+            const SizedBox.shrink(),
+          ..._filteredItems.map((item) {
+            final selected = item.active;
+            return Text('\${item.name}: $_query', key: Key(selected ? 'a' : 'b'));
+          }),
+        ],
+      ),
+    );
+  }
+}
+`;
+			const offset = code.indexOf("Container(");
+			const actions = getAvailableRefactorActions(code, offset);
+			const extractAction = actions.find((a) => a.title === "Extract Widget");
+			assert.ok(extractAction !== undefined);
+
+			const appended = extractAction?.appendText ?? "";
+			assert.ok(appended.includes("final bool hasSelection;"));
+			assert.ok(appended.includes("final bool hasVisibleItems;"));
+			assert.ok(appended.includes("final bool showDetails;"));
+			assert.ok(appended.includes("final int selectedIndex;"));
+			assert.ok(appended.includes("final String query;"));
+			assert.ok(appended.includes("final List<({String name, bool active})> filteredItems;"));
+			assert.ok(appended.includes("final void Function(int) select;"));
+			assert.ok(appended.includes("if (hasVisibleItems)"));
+			assert.ok(appended.includes("else"));
+			assert.ok(appended.includes("...filteredItems.map("));
+			assert.ok(appended.includes("item.active"));
+			assert.ok(!appended.includes("final dynamic"));
+			assert.ok(!appended.includes("final VoidCallback select;"));
+		});
+
+		it("extracts State fields referenced through widget. and complex callbacks", () => {
+			const code = `
+class CallbackPanel extends StatefulWidget {
+  const CallbackPanel({
+    super.key,
+    required this.title,
+    required this.onSelected,
+    this.enabled = true,
+    this.trailing,
+  });
+
+  final String title;
+  final void Function(String value) onSelected;
+  final bool enabled;
+  final Widget? trailing;
+
+  @override
+  State<CallbackPanel> createState() => _CallbackPanelState();
+}
+
+class _CallbackPanelState extends State<CallbackPanel> {
+  bool _expanded = false;
+
+  void _handleSelect(String value, {bool notify = true}) {
+    widget.onSelected(value);
+    if (notify) setState(() => _expanded = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      child: Column(
+        children: [
+          Text(widget.title),
+          if (widget.trailing != null) widget.trailing! else const SizedBox.shrink(),
+          if (widget.enabled)
+            Button(
+              title: _expanded ? 'Collapse' : 'Expand',
+              onPressed: () => _handleSelect(widget.title),
+            )
+          else
+            const Text('Disabled'),
+        ],
+      ),
+    );
+  }
+}
+`;
+			const offset = code.indexOf("return Container(") + "return ".length;
+			const actions = getAvailableRefactorActions(code, offset);
+			const extractAction = actions.find((a) => a.title === "Extract Widget");
+			assert.ok(extractAction !== undefined);
+
+			assert.ok(extractAction?.newText.includes("title: widget.title"));
+			assert.ok(extractAction?.newText.includes("trailing: widget.trailing"));
+			assert.ok(extractAction?.newText.includes("enabled: widget.enabled"));
+			assert.ok(extractAction?.newText.includes("expanded: _expanded"));
+			assert.ok(extractAction?.newText.includes("handleSelect: _handleSelect"));
+			assert.ok(!extractAction?.newText.includes("onSelected:"));
+
+			const appended = extractAction?.appendText ?? "";
+			assert.ok(appended.includes("final String title;"));
+			assert.ok(appended.includes("final Widget? trailing;"));
+			assert.ok(appended.includes("final bool enabled;"));
+			assert.ok(appended.includes("final bool expanded;"));
+			assert.ok(appended.includes("final void Function(String, {bool notify}) handleSelect;"));
+			assert.ok(appended.includes("Text(title)"));
+			assert.ok(appended.includes("trailing!"));
+			assert.ok(appended.includes("handleSelect(title)"));
+		});
+
+		it("preserves complex callback signatures on extracted fields", () => {
+			const code = `
+class Signatures extends StatelessWidget {
+  const Signatures({
+    super.key,
+    required this.onCommit,
+    required this.onLog,
+    required this.onChanged,
+  });
+
+  final void Function({required String value, bool force}) onCommit;
+  final void Function(String value, [int repeat]) onLog;
+  final void Function(int index)? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      child: Column(
+        children: [
+          Button(onPressed: () => onCommit(value: 'ok')),
+          Button(onPressed: () => onLog('entry', 2)),
+          if (onChanged != null) Button(onPressed: () => onChanged!(1)) else const SizedBox.shrink(),
+        ],
+      ),
+    );
+  }
+}
+`;
+			const offset = code.indexOf("Container(");
+			const actions = getAvailableRefactorActions(code, offset);
+			const extractAction = actions.find((a) => a.title === "Extract Widget");
+			assert.ok(extractAction !== undefined);
+
+			const appended = extractAction?.appendText ?? "";
+			assert.ok(appended.includes("final void Function({required String value, bool force}) onCommit;"));
+			assert.ok(appended.includes("final void Function(String value, [int repeat]) onLog;"));
+			assert.ok(appended.includes("final void Function(int index)? onChanged;"));
+		});
+	});
+
+	describe("Extract Widget: collection if/else cursor targeting", () => {
+		const code = `
+class CursorDemo extends StatelessWidget {
+  const CursorDemo({super.key, this.enabled = true, this.trailing, this.items = const []});
+
+  final bool enabled;
+  final Widget? trailing;
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            const Text('Header'),
+            if (trailing != null)
+              trailing!
+            else
+              const SizedBox.shrink(),
+          ],
+        ),
+        if (enabled)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: const Text('Enabled'),
+          )
+        else
+          const Text('Disabled'),
+        if (items.isEmpty)
+          const Text('Empty')
+        else if (items.length == 1)
+          const Text('One')
+        else
+          const Text('Many'),
+      ],
+    );
+  }
+}
+`.trimStart();
+
+		function offsetOf(lineText: string, occurrence = 0): number {
+			let offset = -1;
+			for (let i = 0; i <= occurrence; i++)
+				offset = code.indexOf(lineText, offset + 1);
+			return offset;
+		}
+
+		function targetAt(offset: number): string | undefined {
+			const scanner = new DartCodeScanner(code);
+			const target = scanner.findEnclosingWidget(offset);
+			if (!target) return undefined;
+			return code.substring(target.start, target.end).split("\n")[0].trim();
+		}
+
+		it("targets the branch widget when the cursor is on an if condition", () => {
+			assert.equal(targetAt(offsetOf("if (enabled)") + "if (".length), "Padding(");
+			assert.equal(targetAt(offsetOf("if (trailing != null)") + "if (".length), "trailing!");
+		});
+
+		it("targets the else branch widget when the cursor is on the else keyword", () => {
+			assert.equal(targetAt(offsetOf("else")), "const SizedBox.shrink()");
+			assert.equal(targetAt(offsetOf("else", 1)), "const Text('Disabled')");
+		});
+
+		it("keeps the innermost widget when the cursor is inside a branch widget", () => {
+			assert.equal(targetAt(offsetOf("Padding(")), "Padding(");
+			assert.equal(targetAt(offsetOf("const Text('Enabled')")), "const Text('Enabled')");
+			assert.equal(targetAt(offsetOf("const Text('Empty')")), "const Text('Empty')");
+		});
+
+		it("follows else-if chains to the selected branch", () => {
+			assert.equal(targetAt(offsetOf("else if (items.length == 1)") + "else if (".length), "const Text('One')");
+			assert.equal(targetAt(offsetOf("const Text('Many')")), "const Text('Many')");
+			assert.equal(targetAt(offsetOf("else", 3)), "const Text('Many')");
+		});
+
+		it("extracts the branch widget rather than the enclosing list", () => {
+			const actions = getAvailableRefactorActions(code, offsetOf("if (enabled)") + "if (".length);
+			const extractAction = actions.find((action) => action.title === "Extract Widget");
+			assert.ok(extractAction !== undefined);
+			assert.ok(extractAction?.newText.includes("NewWidget("));
+			assert.ok(extractAction?.appendText?.includes("Text('Enabled')"));
+			assert.equal(extractAction?.appendText?.includes("Column("), false);
+		});
 	});
 
 	describe("Convert to StatefulWidget <-> StatelessWidget", () => {
