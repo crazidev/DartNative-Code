@@ -11,7 +11,7 @@ import { disposeAll, PromiseCompleter, PromiseOr } from "../utils";
 import { attachPing } from "../utils/ws";
 import { UnknownNotification } from "./interfaces";
 import { ProcessExitCodes, StdIOService } from "./stdio_service";
-import { ActiveLocation, ActiveLocationChangedEvent, DebugSessionChangedEvent, DebugSessionStartedEvent, DebugSessionStoppedEvent, DeviceAddedEvent, DeviceChangedEvent, DeviceRemovedEvent, DeviceSelectedEvent, DtdMessage, DtdNotification, DtdRequest, DtdResponse, DtdResult, EnablePlatformTypeParams, Event, EventKind, GetDebugSessionsResult, GetDevicesResult, GetIDEWorkspaceRootsParams, GetIDEWorkspaceRootsResult, GetVmServicesResult, HotReloadParams, HotRestartParams, NavigateToCodeParams, OpenDevToolsPageParams, ReadFileAsStringParams, ReadFileAsStringResult, RegisterServiceParams, RegisterServiceResult, RegisterVmServiceParams, RegisterVmServiceResult, SelectDeviceParams, Service, ServiceMethod, ServiceRegisteredEventData, ServiceUnregisteredEventData, SetIDEWorkspaceRootsParams, SetIDEWorkspaceRootsResult, Stream, SuccessResult, UnregisterVmServiceParams, UnregisterVmServiceResult } from "./tooling_daemon_services";
+import { ActiveLocation, ActiveLocationChangedEvent, AttachToVmServiceParams, DebugSessionChangedEvent, DebugSessionStartedEvent, DebugSessionStoppedEvent, DeviceAddedEvent, DeviceChangedEvent, DeviceRemovedEvent, DeviceSelectedEvent, DtdMessage, DtdNotification, DtdRequest, DtdResponse, DtdResult, EnablePlatformTypeParams, Event, EventKind, GetDebugSessionsResult, GetDevicesResult, GetIDEWorkspaceRootsParams, GetIDEWorkspaceRootsResult, GetVmServicesResult, HotReloadParams, HotRestartParams, NavigateToCodeParams, OpenDevToolsPageParams, ReadFileAsStringParams, ReadFileAsStringResult, RegisterServiceParams, RegisterServiceResult, RegisterVmServiceParams, RegisterVmServiceResult, SelectDeviceParams, Service, ServiceMethod, ServiceRegisteredEventData, ServiceUnregisteredEventData, SetIDEWorkspaceRootsParams, SetIDEWorkspaceRootsResult, Stream, SuccessResult, UnregisterVmServiceParams, UnregisterVmServiceResult } from "./tooling_daemon_services";
 
 export class DartToolingDaemon implements IAmDisposable {
 	protected readonly disposables: IAmDisposable[] = [];
@@ -174,6 +174,7 @@ export class DartToolingDaemon implements IAmDisposable {
 	public async registerService(service: Service.Editor, method: "hotReload", capabilities: object | undefined, f: (params: HotReloadParams) => PromiseOr<DtdResult & SuccessResult>): Promise<void>;
 	public async registerService(service: Service.Editor, method: "hotRestart", capabilities: object | undefined, f: (params: HotRestartParams) => PromiseOr<DtdResult & SuccessResult>): Promise<void>;
 	public async registerService(service: Service.Editor, method: "openDevToolsPage", capabilities: object | undefined, f: (params: OpenDevToolsPageParams) => PromiseOr<DtdResult & SuccessResult>): Promise<void>;
+	public async registerService(service: Service.Editor, method: "attachToVmService", capabilities: object | undefined, f: (params: AttachToVmServiceParams) => PromiseOr<DtdResult & SuccessResult>): Promise<void>;
 	public async registerService(service: Service.Editor, method: "navigateToCode", capabilities: object | undefined, f: (params: NavigateToCodeParams) => PromiseOr<DtdResult & SuccessResult>): Promise<void>;
 	public async registerService(service: Service, method: string, capabilities: object | undefined, f: (params: any) => PromiseOr<DtdResult>): Promise<void> {
 		const serviceName = Service[service];
@@ -196,6 +197,7 @@ export class DartToolingDaemon implements IAmDisposable {
 	public callMethod(service: ServiceMethod.streamCancel, params: { streamId: string }): Promise<DtdResult>;
 	public callMethod(service: ServiceMethod.editorGetActiveLocation): Promise<DtdResult & ActiveLocation>;
 	public callMethod(service: ServiceMethod.editorNavigateToCode, params: NavigateToCodeParams): Promise<DtdResult & SuccessResult>;
+	public callMethod(service: ServiceMethod.editorAttachToVmService, params: AttachToVmServiceParams): Promise<DtdResult & SuccessResult>;
 	public async callMethod(method: ServiceMethod, params?: unknown): Promise<DtdResult> {
 		if (!this.connection)
 			return Promise.reject(`Unable to call ${method}, DTD connection is unavailable`);

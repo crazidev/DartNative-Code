@@ -367,12 +367,15 @@ export class DebugCommands implements IAmDisposable {
 				type: "dart",
 			});
 		}));
-		this.disposables.push(vs.commands.registerCommand("flutter.attachProcess", async () => {
-			await vs.debug.startDebugging(undefined, {
-				name: "Flutter: Attach to Process",
+		this.disposables.push(vs.commands.registerCommand("flutter.attachProcess", async (args?: { vmServiceUri?: string; name?: string; projectRoot?: string }) => {
+			const projectUri = args?.projectRoot ? vs.Uri.file(args.projectRoot) : undefined;
+			const folder = projectUri ? vs.workspace.getWorkspaceFolder(projectUri) : undefined;
+			return vs.debug.startDebugging(folder, {
+				cwd: args?.projectRoot,
+				name: args?.name ?? (args?.vmServiceUri ? "DartNative: Attach to Process" : "Flutter: Attach to Process"),
 				request: "attach",
 				type: "dart",
-				vmServiceUri: "${command:dart.promptForVmService}",
+				vmServiceUri: args?.vmServiceUri ?? "${command:dart.promptForVmService}",
 			});
 		}));
 		this.disposables.push(vs.commands.registerCommand("flutter.runProfileMode", async () => {

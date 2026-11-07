@@ -1,3 +1,6 @@
+import { randomBytes, timingSafeEqual } from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 import { commands, env, ExtensionContext, TabInputText, TextEditor, Uri, window, workspace } from "vscode";
 import { DartCapabilities } from "../../shared/capabilities/dart";
 import { CommandSource, ExtensionRestartReason, restartReasonManual } from "../../shared/constants";
@@ -7,9 +10,9 @@ import { Device } from "../../shared/flutter/daemon_interfaces";
 import { DartSdks, IAmDisposable, Logger } from "../../shared/interfaces";
 import { ProcessExitCodes } from "../../shared/processes";
 import { DartToolingDaemon } from "../../shared/services/tooling_daemon";
-import { ActiveLocation, EditorDebugSession, EditorDevice, EnablePlatformTypeParams, EventKind, HotReloadParams, HotRestartParams, NavigateToCodeParams, OpenDevToolsPageParams, SelectDeviceParams, Service, ServiceMethod, Stream, SuccessResult } from "../../shared/services/tooling_daemon_services";
+import { ActiveLocation, AttachToVmServiceParams, EditorDebugSession, EditorDevice, EnablePlatformTypeParams, EventKind, HotReloadParams, HotRestartParams, NavigateToCodeParams, OpenDevToolsPageParams, SelectDeviceParams, Service, ServiceMethod, Stream, SuccessResult } from "../../shared/services/tooling_daemon_services";
 import { disposeAll, nullToUndefined, PromiseCompleter } from "../../shared/utils";
-import { forceWindowsDriveLetterToUppercaseInUriString, uriComparisonString } from "../../shared/utils/fs";
+import { forceWindowsDriveLetterToUppercaseInUriString, fsPath, uriComparisonString } from "../../shared/utils/fs";
 import { ANALYSIS_FILTERS } from "../../shared/vscode/constants";
 import { FlutterDeviceManager } from "../../shared/vscode/device_manager";
 import { DartDebugSessionInformation } from "../../shared/vscode/interfaces";
@@ -24,6 +27,10 @@ import { getToolEnv } from "../utils/processes";
 export class VsCodeDartToolingDaemon extends DartToolingDaemon {
 	private readonly statusBarItem = getLanguageStatusItem("dart.toolingDaemon", ANALYSIS_FILTERS);
 	private readonly editorServices: EditorServices;
+	private readonly dtdAttachCapability = randomBytes(32).toString("hex");
+	private readonly dtdDescriptorFiles = new Set<string>();
+	private dtdUriForDiscovery: string | undefined;
+	private isDisposed = false;
 	private sendActiveLocationDebounceTimer: NodeJS.Timeout | undefined;
 	public debugCommandsCompleter = new PromiseCompleter<DebugCommands>();
 
@@ -45,12 +52,15 @@ export class VsCodeDartToolingDaemon extends DartToolingDaemon {
 		);
 		context.subscriptions.push(this);
 
-		this.editorServices = new EditorServices(this, deviceManager);
+		this.editorServices = new EditorServices(this, deviceManager, this.dtdAttachCapability);
 
 		this.setUpStatusBarAndCommand(context);
 
 		// Subscribe to event + send current/initial folders.
-		context.subscriptions.push(workspace.onDidChangeWorkspaceFolders(() => this.sendWorkspaceRootsToDaemon()));
+		context.subscriptions.push(workspace.onDidChangeWorkspaceFolders(() => {
+			this.sendWorkspaceRootsToDaemon();
+			this.updateDtdDiscoveryFiles();
+		}));
 		this.sendWorkspaceRootsToDaemon();
 
 		// Handle sending the current active location.
@@ -88,6 +98,10 @@ export class VsCodeDartToolingDaemon extends DartToolingDaemon {
 		statusBarItem.text = "Dart Tooling Daemon Starting…";
 		void this.connected.then((connectionInfo) => {
 			if (connectionInfo) {
+				void this.dtdUri.then((uri) => {
+					this.dtdUriForDiscovery = uri;
+					this.updateDtdDiscoveryFiles();
+				});
 				void commands.executeCommand("setContext", DTD_AVAILABLE, true);
 				statusBarItem.text = "Dart Tooling Daemon";
 				statusBarItem.command = copyUriCommand;
@@ -270,8 +284,78 @@ export class VsCodeDartToolingDaemon extends DartToolingDaemon {
 	}
 
 	public dispose() {
+		this.isDisposed = true;
+		for (const filePath of this.dtdDescriptorFiles)
+			this.removeDtdDiscoveryFile(filePath);
+		this.dtdDescriptorFiles.clear();
 		void commands.executeCommand("setContext", DTD_AVAILABLE, false);
 		super.dispose();
+	}
+
+	private updateDtdDiscoveryFiles() {
+		if (this.isDisposed)
+			return;
+
+		const roots = new Set((workspace.workspaceFolders ?? []).map((folder) => fsPath(folder.uri)));
+		for (const filePath of this.dtdDescriptorFiles) {
+			const root = path.dirname(path.dirname(filePath));
+			if (!roots.has(root)) {
+				this.removeDtdDiscoveryFile(filePath);
+				this.dtdDescriptorFiles.delete(filePath);
+			}
+		}
+
+		if (!this.dtdUriForDiscovery)
+			return;
+
+		for (const root of roots) {
+			const directory = path.join(root, ".dart_tool");
+			const filePath = path.join(directory, "dartnative_dtd.json");
+			const tempPath = `${filePath}.${this.dtdAttachCapability.slice(0, 8)}.tmp`;
+			try {
+				fs.mkdirSync(directory, { recursive: true });
+				if (fs.lstatSync(directory).isSymbolicLink()) {
+					this.logger.warn(`Not writing DTD discovery file into a symbolic link directory: ${directory}`);
+					continue;
+				}
+				if (fs.existsSync(filePath) && fs.lstatSync(filePath).isSymbolicLink()) {
+					this.logger.warn(`Not writing DTD discovery file because it is a symbolic link: ${filePath}`);
+					continue;
+				}
+				const content = `${JSON.stringify({
+					capability: this.dtdAttachCapability,
+					dtdUri: this.dtdUriForDiscovery,
+					updatedAt: new Date().toISOString(),
+					version: 1,
+					workspaceRoot: root,
+				}, undefined, 2)}\n`;
+				const fd = fs.openSync(tempPath, "wx", 0o600);
+				try {
+					fs.writeFileSync(fd, content);
+				} finally {
+					fs.closeSync(fd);
+				}
+				fs.renameSync(tempPath, filePath);
+				fs.chmodSync(filePath, 0o600);
+				this.dtdDescriptorFiles.add(filePath);
+			} catch (e) {
+				try {
+					fs.unlinkSync(tempPath);
+				} catch { }
+				this.logger.warn(`Unable to publish DTD discovery file at ${filePath}: ${e}`);
+			}
+		}
+	}
+
+	private removeDtdDiscoveryFile(filePath: string) {
+		try {
+			const descriptor = JSON.parse(fs.readFileSync(filePath, "utf8"));
+			if (descriptor.capability === this.dtdAttachCapability)
+				fs.unlinkSync(filePath);
+		} catch (e: any) {
+			if (e?.code !== "ENOENT")
+				this.logger.warn(`Unable to remove DTD discovery file at ${filePath}: ${e}`);
+		}
 	}
 }
 
@@ -286,6 +370,7 @@ class EditorServices implements IAmDisposable {
 	constructor(
 		private readonly daemon: DartToolingDaemon,
 		private readonly deviceManager: FlutterDeviceManager | undefined,
+		private readonly daemonAttachCapability: string,
 	) { }
 
 	async register(): Promise<void> {
@@ -383,6 +468,37 @@ class EditorServices implements IAmDisposable {
 					return { type: "Success" };
 				},
 			),
+			this.daemon.registerService(Service.Editor, "attachToVmService", undefined, async (params: AttachToVmServiceParams) => {
+				if (!params || typeof params !== "object")
+					throw new Error("Attach parameters are required.");
+				if (!isValidCapability(params.capability, this.daemonAttachCapability)) {
+					const error = new Error("Invalid DTD attach capability.") as Error & { code?: number };
+					error.code = 142;
+					throw error;
+				}
+
+				const vmServiceUri = normalizeVmServiceUri(params.vmServiceUri);
+				if (!vmServiceUri) {
+					const error = new Error("A valid VM Service URI is required (http, https, ws, or wss).") as Error & { code?: number };
+					error.code = 144;
+					throw error;
+				}
+
+				if (params.name !== undefined && typeof params.name !== "string")
+					throw new Error("name must be a string when provided.");
+				if (params.projectRoot !== undefined && typeof params.projectRoot !== "string") {
+					throw new Error("projectRoot must be a string when provided.");
+				}
+
+				const started = await commands.executeCommand<boolean>("flutter.attachProcess", {
+					name: params.name,
+					projectRoot: params.projectRoot,
+					vmServiceUri,
+				});
+				if (started === false)
+					throw new Error("VS Code did not start the DartNative attach session.");
+				return { type: "Success" };
+			}),
 		]);
 	}
 
@@ -428,5 +544,39 @@ class EditorServices implements IAmDisposable {
 			projectRootPath: session.projectRootPath,
 			vmServiceUri: session.vmServiceUri,
 		};
+	}
+}
+
+function isValidCapability(value: unknown, expected: string): boolean {
+	if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value))
+		return false;
+	return timingSafeEqual(Buffer.from(value, "hex"), Buffer.from(expected, "hex"));
+}
+
+function normalizeVmServiceUri(value: unknown): string | undefined {
+	if (typeof value !== "string")
+		return undefined;
+
+	const input = value.trim();
+	if (!input)
+		return undefined;
+
+	// Accept a bare port for parity with the manual attach command.
+	if (/^[0-9]+$/.test(input)) {
+		const port = Number(input);
+		return port > 0 && port <= 65535 ? `http://127.0.0.1:${port}` : undefined;
+	}
+
+	try {
+		const uri = new URL(input);
+		if (!["http:", "https:", "ws:", "wss:"].includes(uri.protocol)
+			|| !uri.hostname
+			|| uri.username
+			|| uri.password
+			|| uri.hash)
+			return undefined;
+		return input;
+	} catch {
+		return undefined;
 	}
 }

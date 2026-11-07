@@ -57,6 +57,7 @@ export enum ServiceMethod {
 	streamCancel = "streamCancel",
 	editorGetActiveLocation = `${Service.Editor}.getActiveLocation`,
 	editorNavigateToCode = `${Service.Editor}.navigateToCode`,
+	editorAttachToVmService = `${Service.Editor}.attachToVmService`,
 }
 
 export interface RegisterServiceParams {
@@ -126,6 +127,13 @@ export interface OpenDevToolsPageParams {
 	forceExternal?: boolean;
 	requiresDebugSession?: boolean;
 	prefersDebugSession?: boolean;
+}
+
+export interface AttachToVmServiceParams {
+	capability: string;
+	vmServiceUri: string;
+	name?: string;
+	projectRoot?: string;
 }
 
 export interface SuccessResult {

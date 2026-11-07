@@ -1,4 +1,6 @@
 import { strict as assert } from "assert";
+import * as fs from "fs";
+import * as path from "path";
 import * as vs from "vscode";
 import { isWin } from "../../../shared/constants";
 import { ActiveLocation, ActiveLocationChangedEvent, EventKind, ServiceMethod, Stream } from "../../../shared/services/tooling_daemon_services";
@@ -110,6 +112,68 @@ describe("dart tooling daemon", () => {
 		await assert.rejects(
 			daemon.callMethod(ServiceMethod.editorNavigateToCode, { uri: "https://dart.dev" }),
 			(error: any) => error?.code === 144,
+		);
+	});
+
+	it("should attach to an MCP-provided VM Service URI", async () => {
+		const daemon = privateApi.toolingDaemon;
+		assert.ok(daemon);
+		await daemon.connected;
+		await waitFor(() => daemon.registeredServiceMethods.has(ServiceMethod.editorAttachToVmService));
+		const dtdDescriptorPath = path.join(fsPath(vs.workspace.workspaceFolders![0].uri), ".dart_tool", "dartnative_dtd.json");
+		await waitFor(() => fs.existsSync(dtdDescriptorPath));
+		const dtdDescriptor = JSON.parse(fs.readFileSync(dtdDescriptorPath, "utf8")) as { capability: string; dtdUri: string };
+		assert.equal(dtdDescriptor.dtdUri, await daemon.dtdUri);
+
+		const originalStartDebugging = vs.debug.startDebugging;
+		let attachedConfig: vs.DebugConfiguration | undefined;
+		try {
+			(vs.debug as any).startDebugging = async (_folder: vs.WorkspaceFolder | undefined, config: vs.DebugConfiguration) => {
+				attachedConfig = config;
+				return true;
+			};
+
+			const result = await daemon.callMethod(ServiceMethod.editorAttachToVmService, {
+				capability: dtdDescriptor.capability,
+				name: "DartNative MCP app",
+				projectRoot: path.dirname(fsPath(helloWorldMainFile)),
+				vmServiceUri: "ws://127.0.0.1:8181/secret/",
+			});
+
+			assert.equal(result.type, "Success");
+			assert.equal(attachedConfig?.request, "attach");
+			assert.equal(attachedConfig?.type, "dart");
+			assert.equal(attachedConfig?.vmServiceUri, "ws://127.0.0.1:8181/secret/");
+			assert.equal(attachedConfig?.name, "DartNative MCP app");
+		} finally {
+			(vs.debug as any).startDebugging = originalStartDebugging;
+		}
+	});
+
+	it("should reject invalid VM Service URIs when attaching through DTD", async () => {
+		const daemon = privateApi.toolingDaemon;
+		assert.ok(daemon);
+		await daemon.connected;
+		await waitFor(() => daemon.registeredServiceMethods.has(ServiceMethod.editorAttachToVmService));
+		const dtdDescriptorPath = path.join(fsPath(vs.workspace.workspaceFolders![0].uri), ".dart_tool", "dartnative_dtd.json");
+		await waitFor(() => fs.existsSync(dtdDescriptorPath));
+		const dtdDescriptor = JSON.parse(fs.readFileSync(dtdDescriptorPath, "utf8")) as { capability: string };
+
+		await assert.rejects(
+			daemon.callMethod(ServiceMethod.editorAttachToVmService, { capability: dtdDescriptor.capability, vmServiceUri: "file:///etc/passwd" }),
+			(error: any) => error?.code === 144,
+		);
+	});
+
+	it("should require the workspace DTD attach capability", async () => {
+		const daemon = privateApi.toolingDaemon;
+		assert.ok(daemon);
+		await daemon.connected;
+		await waitFor(() => daemon.registeredServiceMethods.has(ServiceMethod.editorAttachToVmService));
+
+		await assert.rejects(
+			daemon.callMethod(ServiceMethod.editorAttachToVmService, { capability: "", vmServiceUri: "ws://127.0.0.1:8181/secret/" }),
+			(error: any) => error?.code === 142,
 		);
 	});
 
