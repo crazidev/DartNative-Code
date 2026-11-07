@@ -2,6 +2,15 @@
 
 All notable changes to the "dartnative" extension will be documented in this file.
 
+## [3.145.2] - 2026-11-02
+
+### Added
+- **VM Service attach for MCP clients**: Publish the active workspace DTD endpoint so MCP clients can request VS Code debugger attachment to a launched Dart VM Service.
+- **Pub package links**: Clicking a package in `pubspec.yaml` now opens its correct package page on `dartpub.dev` or `pub.dev`.
+
+### Changed
+- **Extension icon**: Updated the DartNative extension icon.
+
 ## [3.145.1] - 2026-11-02
 
 ### Added
